@@ -111,7 +111,9 @@ def main() -> None:
             "minimum_capture_rate": float(result["solar_capture_rate"].min()),
             "maximum_capture_rate": float(result["solar_capture_rate"].max()),
         })
-    pd.DataFrame(sensitivity_rows).to_csv(output / "shape_exponent_sensitivity.csv", index=False)
+    sensitivity = pd.DataFrame(sensitivity_rows).round(10)
+    sensitivity.to_csv(output / "shape_exponent_sensitivity.csv", index=False)
+    sensitivity_rows = sensitivity.to_dict(orient="records")
 
     payload = {
         **manifest,

@@ -96,7 +96,7 @@ The market series is different: it is derived from official Electricity Authorit
 
 ## Validation
 
-Thirty automated tests cover the CRS gate, exclusion and flag rules, both width methods, spatial-indexed nearest distance, the reject-rate gate, 46/48/50-period days, UTC uniqueness, merge row conservation, duplicate and unmatched keys, output-shape sensitivity, zero-output rejection, and the flat-output invariant. GitHub Actions runs the tests and the complete demo pipeline, then fails if committed outputs or dashboard data differ.
+Thirty automated tests cover the CRS gate, exclusion and flag rules, both width methods, spatial-indexed nearest distance, the reject-rate gate, 46/48/50-period days, UTC uniqueness, merge row conservation, duplicate and unmatched keys, output-shape sensitivity, zero-output rejection, and the flat-output invariant. GitHub Actions runs the complete demo pipeline, strictly diffs CSV/JSON, compares GeoPackages by fields and geometry, and applies a bounded pixel-difference check to figures so platform metadata cannot mask or fabricate a result change.
 
 ## Licence and attribution
 

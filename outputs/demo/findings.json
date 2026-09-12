@@ -75,21 +75,21 @@
   "shape_exponent_sensitivity": [
     {
       "shaping_exponent": 1.0,
-      "mean_capture_rate": 0.9460925608517124,
-      "minimum_capture_rate": 0.7668738471248197,
-      "maximum_capture_rate": 1.090879027557825
+      "mean_capture_rate": 0.9460925609,
+      "minimum_capture_rate": 0.7668738471,
+      "maximum_capture_rate": 1.0908790276
     },
     {
       "shaping_exponent": 1.15,
-      "mean_capture_rate": 0.9394096230064474,
-      "minimum_capture_rate": 0.7475742568418728,
-      "maximum_capture_rate": 1.090213356046997
+      "mean_capture_rate": 0.939409623,
+      "minimum_capture_rate": 0.7475742568,
+      "maximum_capture_rate": 1.090213356
     },
     {
       "shaping_exponent": 1.3,
-      "mean_capture_rate": 0.9329836527502406,
-      "minimum_capture_rate": 0.7291586637399486,
-      "maximum_capture_rate": 1.0897818156086765
+      "mean_capture_rate": 0.9329836528,
+      "minimum_capture_rate": 0.7291586637,
+      "maximum_capture_rate": 1.0897818156
     }
   ],
   "top_sites": [
