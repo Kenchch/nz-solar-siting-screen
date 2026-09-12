@@ -26,70 +26,156 @@
       "year": 2019,
       "observations": 17520,
       "mean_price_nzd_mwh": 115.5736,
-      "solar_capture_rate": 1.0902,
+      "solar_capture_rate": 1.0869,
       "flat_capture_rate": 1.0
     },
     {
       "year": 2020,
       "observations": 17568,
       "mean_price_nzd_mwh": 103.3158,
-      "solar_capture_rate": 0.9664,
+      "solar_capture_rate": 0.9631,
       "flat_capture_rate": 1.0
     },
     {
       "year": 2021,
       "observations": 17520,
       "mean_price_nzd_mwh": 171.1649,
-      "solar_capture_rate": 0.881,
+      "solar_capture_rate": 0.8816,
       "flat_capture_rate": 1.0
     },
     {
       "year": 2022,
       "observations": 17520,
       "mean_price_nzd_mwh": 116.4483,
-      "solar_capture_rate": 0.9321,
+      "solar_capture_rate": 0.9341,
       "flat_capture_rate": 1.0
     },
     {
       "year": 2023,
       "observations": 17520,
       "mean_price_nzd_mwh": 119.1147,
-      "solar_capture_rate": 1.0831,
+      "solar_capture_rate": 1.0871,
       "flat_capture_rate": 1.0
     },
     {
       "year": 2024,
       "observations": 17568,
       "mean_price_nzd_mwh": 208.9276,
-      "solar_capture_rate": 0.7476,
+      "solar_capture_rate": 0.7541,
       "flat_capture_rate": 1.0
     },
     {
       "year": 2025,
       "observations": 17472,
       "mean_price_nzd_mwh": 157.1919,
-      "solar_capture_rate": 0.8755,
+      "solar_capture_rate": 0.8788,
       "flat_capture_rate": 1.0
     }
   ],
   "shape_exponent_sensitivity": [
     {
       "shaping_exponent": 1.0,
-      "mean_capture_rate": 0.9460925609,
-      "minimum_capture_rate": 0.7668738471,
-      "maximum_capture_rate": 1.0908790276
+      "mean_capture_rate": 0.9478312834,
+      "minimum_capture_rate": 0.7732346275,
+      "maximum_capture_rate": 1.0874514493
     },
     {
       "shaping_exponent": 1.15,
-      "mean_capture_rate": 0.939409623,
-      "minimum_capture_rate": 0.7475742568,
-      "maximum_capture_rate": 1.090213356
+      "mean_capture_rate": 0.9408128453,
+      "minimum_capture_rate": 0.7540929149,
+      "maximum_capture_rate": 1.0870750447
     },
     {
       "shaping_exponent": 1.3,
-      "mean_capture_rate": 0.9329836528,
-      "minimum_capture_rate": 0.7291586637,
-      "maximum_capture_rate": 1.0897818156
+      "mean_capture_rate": 0.9341225648,
+      "minimum_capture_rate": 0.7358388113,
+      "maximum_capture_rate": 1.0929584238
+    }
+  ],
+  "solar_time_basis_comparison": [
+    {
+      "year": 2019,
+      "civil_clock_capture_rate": 1.090213356,
+      "apparent_solar_capture_rate": 1.0869324954,
+      "change_percentage_points": -0.3280860605
+    },
+    {
+      "year": 2020,
+      "civil_clock_capture_rate": 0.9663873435,
+      "apparent_solar_capture_rate": 0.9631234572,
+      "change_percentage_points": -0.326388633
+    },
+    {
+      "year": 2021,
+      "civil_clock_capture_rate": 0.8810488891,
+      "apparent_solar_capture_rate": 0.8815546098,
+      "change_percentage_points": 0.0505720781
+    },
+    {
+      "year": 2022,
+      "civil_clock_capture_rate": 0.9321013729,
+      "apparent_solar_capture_rate": 0.9341244021,
+      "change_percentage_points": 0.2023029204
+    },
+    {
+      "year": 2023,
+      "civil_clock_capture_rate": 1.0830874181,
+      "apparent_solar_capture_rate": 1.0870750447,
+      "change_percentage_points": 0.3987626631
+    },
+    {
+      "year": 2024,
+      "civil_clock_capture_rate": 0.7475742568,
+      "apparent_solar_capture_rate": 0.7540929149,
+      "change_percentage_points": 0.6518658012
+    },
+    {
+      "year": 2025,
+      "civil_clock_capture_rate": 0.8754547246,
+      "apparent_solar_capture_rate": 0.8787869928,
+      "change_percentage_points": 0.3332268203
+    }
+  ],
+  "market_year_accounting": [
+    {
+      "year": 2018,
+      "utc_year_rows": 26,
+      "nz_market_year_rows": 0
+    },
+    {
+      "year": 2019,
+      "utc_year_rows": 17520,
+      "nz_market_year_rows": 17520
+    },
+    {
+      "year": 2020,
+      "utc_year_rows": 17568,
+      "nz_market_year_rows": 17568
+    },
+    {
+      "year": 2021,
+      "utc_year_rows": 17520,
+      "nz_market_year_rows": 17520
+    },
+    {
+      "year": 2022,
+      "utc_year_rows": 17520,
+      "nz_market_year_rows": 17520
+    },
+    {
+      "year": 2023,
+      "utc_year_rows": 17520,
+      "nz_market_year_rows": 17520
+    },
+    {
+      "year": 2024,
+      "utc_year_rows": 17568,
+      "nz_market_year_rows": 17568
+    },
+    {
+      "year": 2025,
+      "utc_year_rows": 17446,
+      "nz_market_year_rows": 17472
     }
   ],
   "top_sites": [

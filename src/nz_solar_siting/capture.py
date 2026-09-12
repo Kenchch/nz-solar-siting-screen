@@ -65,6 +65,8 @@ def yearly_capture_rates(
     timezone: str = "Pacific/Auckland",
     shaping_exponent: float = 1.15,
     timestep_minutes: int = 30,
+    longitude_deg: float = 172.45,
+    solar_time_basis: str = "apparent_solar",
 ) -> pd.DataFrame:
     data = prices.copy()
     data[timestamp_col] = _as_utc(data[timestamp_col])
@@ -80,6 +82,7 @@ def yearly_capture_rates(
             target_capacity_factor=capacity_factor,
             timestep_minutes=timestep_minutes, timezone=timezone,
             shaping_exponent=shaping_exponent,
+            longitude_deg=longitude_deg, solar_time_basis=solar_time_basis,
         )
         group = group.sort_values(timestamp_col).copy()
         try:
@@ -100,7 +103,13 @@ def yearly_capture_rates(
             "solar_capture_rate": capture_rate(merged[price_col], merged["output_pu"]),
             "flat_capture_rate": capture_rate(merged[price_col], pd.Series(1.0, index=merged.index)),
         })
-    return pd.DataFrame(records)
+    result = pd.DataFrame(records)
+    accounted_rows = int(result["observations"].sum()) if not result.empty else 0
+    if accounted_rows != len(data):
+        raise CaptureAlignmentError(
+            f"market-year accounting mismatch: {len(data)} input rows -> {accounted_rows} observations"
+        )
+    return result
 
 
 def read_ea_price_csv(path: str, node: str, timezone: str = "Pacific/Auckland") -> pd.DataFrame:

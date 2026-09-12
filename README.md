@@ -8,15 +8,46 @@ An auditable Python workflow for utility-scale fixed-tilt PV screening in Canter
 
 ![Grid distance comparison](outputs/demo/figures/grid_distance_comparison.png)
 
-## Three findings
+## One empirical finding, two method warnings
 
-1. **Grid proximity is too uncertain to hide inside one score.** In the deterministic demonstration, only 2 of the top 4 candidates appear in both the LINZ powerline-layer ranking and the road-proxy ranking. The union contains 6 sites, so 4 are exclusive to one method (Jaccard index 0.333). This does not prove that roads are a better representation of the distribution network. It proves the open-data answer is method-sensitive and should become a `verify_grid` review flag.
-2. **A single width proxy changes the screening answer.** The 180 m inward-buffer test is the S-02 baseline; `2A/P` remains beside it as an audit comparator. The deterministic geometry stress case is a 200 × 200 m square: the core test passes while `2A/P` reports 100 m and fails. The run manifest reports the number of disagreements instead of hiding this modelling choice.
-3. **Generation is not revenue — but the signal is not a simple straight-line decline.** Official Electricity Authority half-hourly final prices at ISL0661 produce annual solar-shape capture rates from **74.8% to 109.0%** over 2019–2025. Five of seven annual values are below 100%; 2019 and 2023 are above it. The strongest discount is 2024 at **74.8%**. The honest conclusion is volatility and timing risk, not a claimed monotonic cannibalisation trend.
+1. **Empirical — generation is not revenue, but the signal is not a simple straight-line decline.** Official Electricity Authority half-hourly final prices at ISL0661 produce apparent-solar-time capture rates from **75.4% to 108.7%** over 2019–2025. Five of seven annual values are below 100%; 2019 and 2023 are above it. The strongest discount is 2024 at **75.4%**. The honest conclusion is volatility and timing risk, not a claimed monotonic cannibalisation trend.
+2. **Method warning — grid proximity is too uncertain to hide inside one score.** Only 2 of the top 4 candidates appear in both proxy rankings (Jaccard 0.333; **demo geometry, n = 4 — illustrative, not an empirical estimate**). This does not prove roads are a better representation of the distribution network; it shows why both distances and a `verify_grid` flag must remain visible.
+3. **Method warning — a single width proxy changes the screening answer.** The 180 m inward-buffer test is the S-02 baseline; `2A/P` remains beside it as an audit comparator. The deterministic geometry stress case is a 200 × 200 m square: the core test passes while `2A/P` reports 100 m and fails. The run manifest reports the number of disagreements instead of hiding this modelling choice.
 
 ![Capture rate by year](outputs/demo/figures/capture_rate_by_year.png)
 
-The 2025 Electricity Authority December source file is explicitly labelled `incomplete`; 2025 has 17,472 observations rather than a normal 17,520. It is retained with that provenance visible and must not be presented as a final full-year statistic without rechecking the source.
+### Quantified correction: civil clock versus solar time
+
+The earlier model placed solar noon at 12:00 on the civil clock, including during NZDT. The corrected model converts each UTC instant to local time, then adjusts its hour angle for longitude, UTC offset and the equation of time. The January peak moves from 12:00 to 13:30 NZDT in the half-hour model.
+
+| NZ market year | Civil-clock model | Corrected apparent-solar model | Change (percentage points) |
+|---:|---:|---:|---:|
+| 2019 | 109.02% | 108.69% | −0.33 |
+| 2020 | 96.64% | 96.31% | −0.33 |
+| 2021 | 88.10% | 88.16% | +0.05 |
+| 2022 | 93.21% | 93.41% | +0.20 |
+| 2023 | 108.31% | 108.71% | +0.40 |
+| 2024 | 74.76% | 75.41% | +0.65 |
+| 2025 | 87.55% | 87.88% | +0.33 |
+
+> I found that my solar model placed the summer output peak 90 minutes too early. After correction, the capture-rate range moved from 74.76%–109.02% to 75.41%–108.71%, with a maximum annual shift of 0.65 percentage points. The error was real and the conclusion was robust to it; both are reported.
+
+### Observation-year reconciliation
+
+`capture_rates.csv` groups by **New Zealand market year** after converting UTC timestamps to `Pacific/Auckland`, not by the year printed at the start of the UTC timestamp. All 122,688 input rows are assigned exactly once, and the pipeline asserts that `sum(observations) == len(price input)`.
+
+| Year label | Rows grouped by UTC year | Rows grouped by NZ market year / reported observations |
+|---:|---:|---:|
+| 2018 | 26 | 0 |
+| 2019 | 17,520 | 17,520 |
+| 2020 | 17,568 | 17,568 |
+| 2021 | 17,520 | 17,520 |
+| 2022 | 17,520 | 17,520 |
+| 2023 | 17,520 | 17,520 |
+| 2024 | 17,568 | 17,568 |
+| 2025 | 17,446 | 17,472 |
+
+The 26 UTC rows dated 2018-12-31 are the first 13 NZDT hours of market year 2019. Likewise, the NZ market-year count for 2025 includes its first 26 rows from 2024 UTC. The 2025 Electricity Authority December file is explicitly labelled `incomplete`; on the market-year basis, 2025 has 17,472 observations rather than a normal 17,520. It remains unsuitable for presentation as a final full-year statistic without rechecking the source.
 
 ## Scope and decision logic
 
@@ -45,11 +76,11 @@ This dataset only supplies LUC class, not the full planning test. S-05 is theref
 
 ### M1 — siting
 
-All metric work is rejected unless the input CRS is EPSG:2193 (NZTM2000). Geometry rules are evaluated first; failed records are quarantined rather than deleted. Surviving features retain both grid distances, their two ranks, absolute rank shift, HPL flag and solar rank. The composite score is for review ordering only.
+All metric work is rejected unless the input CRS is EPSG:2193 (NZTM2000). Geometry rules are evaluated first; failed records are quarantined rather than deleted. Nearest network distances use `geopandas.sjoin_nearest`, backed by the spatial index, rather than a union-and-row-loop calculation. Surviving features retain both grid distances, their two ranks, absolute rank shift, HPL flag and solar rank. The composite score is for review ordering only.
 
 ### M2 — output shape
 
-The model calculates positive solar elevation for each half hour at latitude −43.55°, raises it to a documented shaping exponent, and scales the annual mean to the configured 17.5% capacity factor. It is a typical clear-sky timing proxy — not measured generation and not a weather model. It excludes cloud, snow, horizon shading, degradation, tracking and inverter clipping.
+The model calculates positive solar elevation for each half hour at latitude −43.55° and longitude 172.45°, raises it to a documented shaping exponent, and scales the annual mean to the configured 17.5% capacity factor. Hour angle uses apparent solar time derived from longitude, the active NZST/NZDT UTC offset and an equation-of-time approximation. It is a typical clear-sky timing proxy — not measured generation and not a weather model. It excludes cloud, snow, terrain and horizon shading, degradation, tracking and inverter clipping; the published civil-clock comparison isolates the effect of the chosen time basis.
 
 All publication assumptions live in [`config/assumptions.yml`](config/assumptions.yml). Capacity-factor scaling is an invariant because the scalar cancels from capture rate. The actual sensitivity run varies the timing-shape exponent from 1.0 to 1.3; this changes the concentration of daytime output and therefore the measured capture-rate range.
 
@@ -85,6 +116,8 @@ On Windows use `.venv/Scripts/` in place of `.venv/bin/`. To refresh the public 
 - `outputs/demo/site_cards/` — top-three map cards (demo geometry; no aerial claim)
 - `outputs/demo/figures/` — proxy comparison and capture-rate figures
 - `outputs/demo/capture_rates.csv` — annual ISL0661 results and flat-profile control
+- `outputs/demo/solar_time_basis_comparison.csv` — old civil-clock versus corrected solar-time results
+- `outputs/demo/market_year_accounting.csv` — UTC-year and NZ-market-year row reconciliation
 - `outputs/demo/shape_exponent_sensitivity.csv` — timing-shape sensitivity at exponents 1.0, 1.15 and 1.3
 - `outputs/demo/run_manifest.json` and `findings.json` — machine-readable provenance and dashboard payload
 
@@ -96,7 +129,7 @@ The market series is different: it is derived from official Electricity Authorit
 
 ## Validation
 
-Thirty automated tests cover the CRS gate, exclusion and flag rules, both width methods, spatial-indexed nearest distance, the reject-rate gate, 46/48/50-period days, UTC uniqueness, merge row conservation, duplicate and unmatched keys, output-shape sensitivity, zero-output rejection, and the flat-output invariant. GitHub Actions runs the complete demo pipeline, strictly diffs CSV/JSON, compares GeoPackages by fields and geometry, and applies a bounded pixel-difference check to figures so platform metadata cannot mask or fabricate a result change.
+Thirty-four automated tests cover the CRS gate, exclusion and flag rules, both width methods, spatial-indexed nearest distance, the reject-rate gate, 46/48/50-period days, UTC uniqueness, committed-input market-year accounting, merge row conservation, January NZDT peak timing, output-shape sensitivity, zero-output rejection, and the flat-output invariant. GitHub Actions runs the complete demo pipeline. It strictly diffs CSV/JSON; because GeoPackage and PNG bytes vary across operating systems, it separately compares GeoPackages by fields and geometry and applies a bounded pixel-difference check to figures.
 
 ## Licence and attribution
 

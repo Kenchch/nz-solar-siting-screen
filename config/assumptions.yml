@@ -7,6 +7,7 @@ siting:
   minimum_area_ha: 20.0
   minimum_average_width_m: 180.0
   maximum_reject_rate: 0.55
+  # Demo-only top half of eight surviving fixtures; never an empirical estimate.
   top_n_comparison: 4
   usable_lcdb_classes:
     - High Producing Exotic Grassland
@@ -17,6 +18,8 @@ siting:
 
 solar:
   latitude_deg: -43.55
+  longitude_deg: 172.45
+  solar_time_basis: apparent_solar
   target_capacity_factor: 0.175
   shaping_exponent: 1.15
   shaping_exponent_sensitivity:

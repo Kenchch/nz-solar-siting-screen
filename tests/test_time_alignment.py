@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
@@ -8,6 +10,8 @@ from nz_solar_siting.capture import (
     yearly_capture_rates,
 )
 from nz_solar_siting.solar_shape import half_hour_shape
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _market_day(date: str, count: int) -> pd.Series:
@@ -65,6 +69,33 @@ def test_yearly_merge_preserves_every_input_row():
     })
     result = yearly_capture_rates(prices)
     assert result.loc[0, "observations"] == len(prices)
+
+
+def test_market_year_observation_totals_reconcile_to_all_input_rows():
+    frames = []
+    for year in (2019, 2020):
+        shape = half_hour_shape(year).iloc[400:800]
+        frames.append(pd.DataFrame({
+            "timestamp_utc": shape.timestamp_utc,
+            "price_nzd_mwh": 50.0 + shape.output_pu.to_numpy(),
+        }))
+    prices = pd.concat(frames, ignore_index=True)
+    result = yearly_capture_rates(prices)
+    assert result.observations.sum() == len(prices)
+
+
+def test_committed_price_rows_reconcile_utc_and_nz_market_years():
+    prices = pd.read_csv(ROOT / "data/derived/ISL0661_2019_2025.csv.gz")
+    timestamp = pd.to_datetime(prices.timestamp_utc, utc=True)
+    utc_counts = prices.groupby(timestamp.dt.year).size()
+    market_counts = prices.groupby(
+        timestamp.dt.tz_convert("Pacific/Auckland").dt.year
+    ).size()
+    assert utc_counts.loc[2018] == 26
+    assert utc_counts.loc[2025] == 17_446
+    assert market_counts.loc[2019] == 17_520
+    assert market_counts.loc[2025] == 17_472
+    assert market_counts.sum() == len(prices)
 
 
 def test_duplicate_price_timestamp_is_rejected():

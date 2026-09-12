@@ -95,16 +95,52 @@ def main() -> None:
         "capacity_factor": float(solar["target_capacity_factor"]),
         "timezone": str(market["timezone"]),
         "timestep_minutes": int(solar["timestep_minutes"]),
+        "longitude_deg": float(solar["longitude_deg"]),
     }
     rates = yearly_capture_rates(
-        prices, shaping_exponent=float(solar["shaping_exponent"]), **rate_options
+        prices, shaping_exponent=float(solar["shaping_exponent"]),
+        solar_time_basis=str(solar["solar_time_basis"]), **rate_options,
     )
     rates.to_csv(output / "capture_rates.csv", index=False)
     plot_capture(rates, figures / "capture_rate_by_year.png")
 
+    clock_rates = yearly_capture_rates(
+        prices, shaping_exponent=float(solar["shaping_exponent"]),
+        solar_time_basis="civil_clock", **rate_options,
+    )
+    time_basis_comparison = clock_rates[["year", "solar_capture_rate"]].rename(
+        columns={"solar_capture_rate": "civil_clock_capture_rate"}
+    ).merge(
+        rates[["year", "solar_capture_rate"]].rename(
+            columns={"solar_capture_rate": "apparent_solar_capture_rate"}
+        ),
+        on="year", validate="one_to_one",
+    )
+    time_basis_comparison["change_percentage_points"] = 100.0 * (
+        time_basis_comparison["apparent_solar_capture_rate"]
+        - time_basis_comparison["civil_clock_capture_rate"]
+    )
+    time_basis_comparison = time_basis_comparison.round(10)
+    time_basis_comparison.to_csv(output / "solar_time_basis_comparison.csv", index=False)
+
+    timestamp_utc = pd.to_datetime(prices["timestamp_utc"], utc=True)
+    utc_counts = prices.groupby(timestamp_utc.dt.year).size().rename("utc_year_rows")
+    market_counts = prices.groupby(
+        timestamp_utc.dt.tz_convert(str(market["timezone"])).dt.year
+    ).size().rename("nz_market_year_rows")
+    accounting = pd.concat([utc_counts, market_counts], axis=1).fillna(0).astype(int)
+    accounting.index.name = "year"
+    accounting = accounting.reset_index()
+    if int(accounting["nz_market_year_rows"].sum()) != len(prices):
+        raise RuntimeError("NZ market-year accounting does not reconcile to price input")
+    accounting.to_csv(output / "market_year_accounting.csv", index=False)
+
     sensitivity_rows = []
     for exponent in solar["shaping_exponent_sensitivity"]:
-        result = yearly_capture_rates(prices, shaping_exponent=float(exponent), **rate_options)
+        result = yearly_capture_rates(
+            prices, shaping_exponent=float(exponent),
+            solar_time_basis=str(solar["solar_time_basis"]), **rate_options,
+        )
         sensitivity_rows.append({
             "shaping_exponent": float(exponent),
             "mean_capture_rate": float(result["solar_capture_rate"].mean()),
@@ -120,6 +156,8 @@ def main() -> None:
         "price_status": "official Electricity Authority final prices, ISL0661; unique UTC trading-period keys",
         "capture_rates": rates.round(4).to_dict(orient="records"),
         "shape_exponent_sensitivity": sensitivity_rows,
+        "solar_time_basis_comparison": time_basis_comparison.to_dict(orient="records"),
+        "market_year_accounting": accounting.to_dict(orient="records"),
         "top_sites": candidates.nlargest(6, "screen_score")[[
             "site_id", "area_ha", "width_core_pass", "width_2ap_m",
             "width_methods_disagree", "S05_hpl_flag", "grid_line_m",

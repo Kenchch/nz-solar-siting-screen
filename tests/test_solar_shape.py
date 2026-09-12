@@ -23,6 +23,27 @@ def test_non_positive_shaping_exponent_is_rejected():
         half_hour_shape(2023, shaping_exponent=0)
 
 
+def test_january_peak_is_between_1300_and_1400_nzdt():
+    shape = half_hour_shape(2023)
+    local = shape.timestamp_utc.dt.tz_convert("Pacific/Auckland")
+    january = shape.loc[local.dt.month == 1]
+    peak_local = january.loc[january.output_pu.idxmax(), "timestamp_utc"].tz_convert(
+        "Pacific/Auckland"
+    )
+    peak_hour = peak_local.hour + peak_local.minute / 60.0
+    assert 13.0 <= peak_hour <= 14.0
+
+
+def test_civil_clock_comparator_peaks_at_noon():
+    shape = half_hour_shape(2023, solar_time_basis="civil_clock")
+    local = shape.timestamp_utc.dt.tz_convert("Pacific/Auckland")
+    january = shape.loc[local.dt.month == 1]
+    peak_local = january.loc[january.output_pu.idxmax(), "timestamp_utc"].tz_convert(
+        "Pacific/Auckland"
+    )
+    assert peak_local.strftime("%H:%M") == "12:00"
+
+
 def test_capture_rate_is_sensitive_to_shaping_exponent():
     broad = half_hour_shape(2023, shaping_exponent=1.0)
     prices = pd.DataFrame({
