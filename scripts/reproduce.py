@@ -101,7 +101,7 @@ def main() -> None:
         prices, shaping_exponent=float(solar["shaping_exponent"]),
         solar_time_basis=str(solar["solar_time_basis"]), **rate_options,
     )
-    rates.to_csv(output / "capture_rates.csv", index=False)
+    rates.round(10).to_csv(output / "capture_rates.csv", index=False)
     plot_capture(rates, figures / "capture_rate_by_year.png")
 
     clock_rates = yearly_capture_rates(
