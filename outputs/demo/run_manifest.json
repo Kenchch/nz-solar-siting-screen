@@ -1,0 +1,22 @@
+{
+  "scope": "screening only; demo geometries are not real parcels",
+  "crs": "EPSG:2193",
+  "total": 12,
+  "candidates": 8,
+  "quarantine": 4,
+  "reject_rate": 0.3333,
+  "grid_comparison": {
+    "n": 4,
+    "overlap_count": 2,
+    "non_overlap_count": 4,
+    "jaccard": 0.333,
+    "grid_only": [
+      "DEMO-01",
+      "DEMO-08"
+    ],
+    "road_only": [
+      "DEMO-07",
+      "DEMO-09"
+    ]
+  }
+}

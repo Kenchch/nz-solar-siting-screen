@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nz-solar-siting-screen"
+version = "0.1.0"
+description = "Auditable Canterbury utility-scale solar siting and capture-rate screening"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "Feng Jiang"}]
+dependencies = [
+  "geopandas>=1.0",
+  "matplotlib>=3.9",
+  "numpy>=2.0",
+  "pandas>=2.2",
+  "pyogrio>=0.10",
+  "pyproj>=3.7",
+  "PyYAML>=6.0",
+  "shapely>=2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3"]
+
+[project.scripts]
+solar-screen = "nz_solar_siting.screen:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q --basetemp=.pytest_tmp"
+testpaths = ["tests"]
+

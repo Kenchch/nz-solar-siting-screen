@@ -1,0 +1,10 @@
+rule_id,name,source,rule_type,threshold,testable_from_open_data,failure_action
+S-01,Minimum contiguous area,Project screening assumption,exclude,20 ha,yes,quarantine
+S-02,Minimum mean width,Project screening assumption,exclude,180 m area/perimeter proxy,yes,quarantine
+S-03,Usable land cover,LCDB v5.0,exclude,Configured whitelist,yes,quarantine
+S-04,Outside public conservation land,DOC Public Conservation Areas,exclude,No material intersection,yes,quarantine
+S-05,Highly productive land flag,NPS-HPL 2022 amended Dec 2025,flag,LUC 1/2/3,yes,retain with consenting review flag
+S-06,Distance to grid data,LINZ Topo50 powerlines and road-centreline proxy,rank,Nearest distance in metres,yes,retain with verify-grid flag
+S-07,Mean annual solar radiation,LENZ mean annual solar radiation,rank,Higher is better,yes,retain and rank
+S-08,Slope,LINZ 8 m DEM,optional,Not implemented in baseline,no,out of scope
+
