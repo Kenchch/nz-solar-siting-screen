@@ -22,7 +22,9 @@ def build_demo_layers() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame, gpd.GeoData
         width = 650 + (i % 3) * 180
         height = 520 + ((i + 1) % 3) * 160
         if i == 10:
-            width = height = 420
+            # Deliberate width-method stress case: a compact 200 m square has
+            # an erosion core at 180 m, while 2A/P reports only 100 m.
+            width = height = 200
         geometries.append(box(x0 + col * 2600, y0 + row * 2400, x0 + col * 2600 + width, y0 + row * 2400 + height))
     sites = gpd.GeoDataFrame(
         {

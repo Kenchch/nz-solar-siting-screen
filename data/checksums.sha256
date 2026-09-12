@@ -1,2 +1,2 @@
-# Add SHA-256 records for local raw inputs here. Demo inputs are generated deterministically in code.
-
+# Committed deterministic market input (filtered ISL0661 series; gzip mtime fixed at zero).
+ba29ba1c760cb5cfff8aa89ab753f808bb3bf3f0152d9390f1082e7f6b6294d2  derived/ISL0661_2019_2025.csv.gz

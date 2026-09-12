@@ -8,6 +8,44 @@ import pandas as pd
 from .solar_shape import half_hour_shape
 
 
+class CaptureAlignmentError(ValueError):
+    """Raised when prices and the production shape cannot align one-to-one."""
+
+
+def trading_period_timestamps(
+    trading_dates: pd.Series,
+    trading_periods: pd.Series,
+    timezone: str = "Pacific/Auckland",
+) -> pd.Series:
+    """Map sequential EA trading periods to unique UTC instants."""
+    labels = trading_dates.astype(str).str.strip()
+    iso = labels.str.fullmatch(r"\d{4}-\d{2}-\d{2}")
+    dates = pd.Series(pd.NaT, index=trading_dates.index, dtype="datetime64[ns]")
+    dates.loc[iso] = pd.to_datetime(labels.loc[iso], format="%Y-%m-%d", errors="raise")
+    dates.loc[~iso] = pd.to_datetime(
+        labels.loc[~iso], format="mixed", dayfirst=True, errors="raise"
+    )
+    dates = dates.dt.normalize()
+    periods = pd.to_numeric(trading_periods, errors="raise").astype(int)
+    if (periods < 1).any() or (periods > 50).any():
+        raise ValueError("trading periods must be integers from 1 to 50")
+    local_midnight = dates.dt.tz_localize(timezone)
+    return local_midnight.dt.tz_convert("UTC") + pd.to_timedelta((periods - 1) * 30, unit="min")
+
+
+def _as_utc(values: pd.Series) -> pd.Series:
+    """Parse timestamps while refusing timezone-naive labels."""
+    if isinstance(values.dtype, pd.DatetimeTZDtype):
+        return values.dt.tz_convert("UTC")
+    if pd.api.types.is_datetime64_dtype(values.dtype):
+        raise CaptureAlignmentError("price timestamps must be timezone-aware UTC instants")
+    labels = values.astype(str).str.strip()
+    aware = labels.str.contains(r"(?:Z|[+-]\d{2}:?\d{2})$", regex=True)
+    if not aware.all():
+        raise CaptureAlignmentError("price timestamps must include a UTC offset or Z suffix")
+    return pd.to_datetime(labels, format="mixed", utc=True, errors="raise")
+
+
 def capture_rate(prices: pd.Series, output: pd.Series) -> float:
     price = pd.to_numeric(prices, errors="coerce").to_numpy(dtype=float)
     generation = pd.to_numeric(output, errors="coerce").to_numpy(dtype=float)
@@ -20,42 +58,52 @@ def capture_rate(prices: pd.Series, output: pd.Series) -> float:
 
 def yearly_capture_rates(
     prices: pd.DataFrame,
-    timestamp_col: str = "timestamp",
+    timestamp_col: str = "timestamp_utc",
     price_col: str = "price_nzd_mwh",
     latitude_deg: float = -43.55,
     capacity_factor: float = 0.175,
+    timezone: str = "Pacific/Auckland",
+    shaping_exponent: float = 1.15,
+    timestep_minutes: int = 30,
 ) -> pd.DataFrame:
     data = prices.copy()
-    raw_time = data[timestamp_col].astype(str)
-    parts = raw_time.str.extract(r"(?P<date>\d{4}-\d{2}-\d{2})T(?P<hour>\d{2}):(?P<minute>\d{2})")
-    if parts.notna().all(axis=None):
-        data[timestamp_col] = (
-            pd.to_datetime(parts["date"])
-            + pd.to_timedelta(parts["hour"].astype(int), unit="h")
-            + pd.to_timedelta(parts["minute"].astype(int), unit="m")
-        )
-    else:
-        data[timestamp_col] = pd.to_datetime(data[timestamp_col], format="mixed")
+    data[timestamp_col] = _as_utc(data[timestamp_col])
+    if data[timestamp_col].duplicated().any():
+        duplicate = data.loc[data[timestamp_col].duplicated(False), timestamp_col].iloc[0]
+        raise CaptureAlignmentError(f"duplicate price timestamp: {duplicate}")
+    data[price_col] = pd.to_numeric(data[price_col], errors="coerce")
+    local_year = data[timestamp_col].dt.tz_convert(timezone).dt.year
     records: list[dict[str, float | int]] = []
-    for year, group in data.groupby(data[timestamp_col].dt.year):
-        shape = half_hour_shape(int(year), latitude_deg, capacity_factor)
-        group = group.sort_values(timestamp_col).copy()
-        group["key"] = group[timestamp_col].dt.strftime("%m-%d %H:%M")
-        shape["key"] = shape["timestamp"].dt.strftime("%m-%d %H:%M")
-        merged = group.merge(shape[["key", "output_pu"]], on="key", how="inner")
-        records.append(
-            {
-                "year": int(year),
-                "observations": int(len(merged)),
-                "mean_price_nzd_mwh": float(merged[price_col].mean()),
-                "solar_capture_rate": capture_rate(merged[price_col], merged["output_pu"]),
-                "flat_capture_rate": capture_rate(merged[price_col], pd.Series(1.0, index=merged.index)),
-            }
+    for year, group in data.groupby(local_year):
+        shape = half_hour_shape(
+            int(year), latitude_deg=latitude_deg,
+            target_capacity_factor=capacity_factor,
+            timestep_minutes=timestep_minutes, timezone=timezone,
+            shaping_exponent=shaping_exponent,
         )
+        group = group.sort_values(timestamp_col).copy()
+        try:
+            merged = group.merge(
+                shape[["timestamp_utc", "output_pu"]], left_on=timestamp_col,
+                right_on="timestamp_utc", how="left", validate="one_to_one",
+            )
+        except pd.errors.MergeError as exc:
+            raise CaptureAlignmentError(f"{year}: price/shape keys are not one-to-one") from exc
+        if len(merged) != len(group):
+            raise CaptureAlignmentError(f"{year}: merge lost/duplicated rows {len(group)} -> {len(merged)}")
+        unmatched = int(merged["output_pu"].isna().sum())
+        if unmatched:
+            raise CaptureAlignmentError(f"{year}: {unmatched} price rows have no production-shape match")
+        records.append({
+            "year": int(year), "observations": int(len(merged)),
+            "mean_price_nzd_mwh": float(merged[price_col].mean()),
+            "solar_capture_rate": capture_rate(merged[price_col], merged["output_pu"]),
+            "flat_capture_rate": capture_rate(merged[price_col], pd.Series(1.0, index=merged.index)),
+        })
     return pd.DataFrame(records)
 
 
-def read_ea_price_csv(path: str, node: str) -> pd.DataFrame:
+def read_ea_price_csv(path: str, node: str, timezone: str = "Pacific/Auckland") -> pd.DataFrame:
     raw = pd.read_csv(path)
     lookup = {str(c).strip().lower().replace(" ", "_"): c for c in raw.columns}
     node_col = next((lookup[k] for k in ("node", "poc", "point_of_connection", "pointofconnection") if k in lookup), None)
@@ -65,8 +113,6 @@ def read_ea_price_csv(path: str, node: str) -> pd.DataFrame:
     if not all((node_col, price_col, date_col, period_col)):
         raise ValueError(f"unrecognised EA schema: {list(raw.columns)}")
     out = raw.loc[raw[node_col].astype(str).str.upper() == node.upper()].copy()
-    period = pd.to_numeric(out[period_col], errors="raise").astype(int)
-    base = pd.to_datetime(out[date_col], dayfirst=True)
-    out["timestamp"] = base + pd.to_timedelta((period - 1) * 30, unit="min")
+    out["timestamp_utc"] = trading_period_timestamps(out[date_col], out[period_col], timezone)
     out["price_nzd_mwh"] = pd.to_numeric(out[price_col], errors="coerce")
-    return out[["timestamp", "price_nzd_mwh"]].dropna()
+    return out[["timestamp_utc", "price_nzd_mwh"]].dropna()

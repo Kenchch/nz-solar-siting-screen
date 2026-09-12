@@ -13,3 +13,5 @@ jobs:
           cache: pip
       - run: pip install -e .[dev]
       - run: pytest
+      - run: python scripts/reproduce.py --demo
+      - run: git diff --exit-code -- outputs/demo docs/data.json

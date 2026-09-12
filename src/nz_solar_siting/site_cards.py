@@ -32,7 +32,8 @@ def write_site_cards(
         lines = [
             f"SCREEN SCORE  {row.screen_score:.2f}",
             f"Area          {row.area_ha:.1f} ha",
-            f"Mean width    {row.mean_width_m:.0f} m",
+            f"Width core    {'PASS' if row.width_core_pass else 'FAIL'}",
+            f"2A/P proxy    {row.width_2ap_m:.0f} m",
             f"LUC flag      {'YES — review' if row.S05_hpl_flag else 'No'}",
             f"Powerline     {row.grid_line_m:,.0f} m",
             f"Road proxy    {row.road_proxy_m:,.0f} m",

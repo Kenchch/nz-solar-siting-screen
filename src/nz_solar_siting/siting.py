@@ -7,7 +7,7 @@ import geopandas as gpd
 import pandas as pd
 from shapely.ops import unary_union
 
-from .geometry import area_hectares, mean_width_area_perimeter
+from .geometry import area_hectares, has_width_core, mean_width_area_perimeter
 from .grid_distance import add_grid_proxies
 from .load import assert_nztm
 
@@ -47,10 +47,16 @@ def evaluate_sites(
 
     out = sites.copy()
     out["area_ha"] = out.geometry.map(area_hectares).round(2)
-    out["mean_width_m"] = out.geometry.map(mean_width_area_perimeter).round(1)
+    out["width_2ap_m"] = out.geometry.map(mean_width_area_perimeter).round(1)
+    out["width_core_pass"] = out.geometry.map(
+        lambda geometry: has_width_core(geometry, cfg.minimum_average_width_m)
+    )
+    out["width_methods_disagree"] = (
+        out["width_2ap_m"] >= cfg.minimum_average_width_m
+    ) != out["width_core_pass"]
     protected = unary_union(conservation.geometry.tolist()) if not conservation.empty else None
     out["S01_pass"] = out["area_ha"] >= cfg.minimum_area_ha
-    out["S02_pass"] = out["mean_width_m"] >= cfg.minimum_average_width_m
+    out["S02_pass"] = out["width_core_pass"]
     out["S03_pass"] = out["lcdb_class"].isin(cfg.usable_lcdb_classes)
     out["S04_pass"] = ~out.geometry.map(
         lambda geom: bool(protected is not None and geom.intersects(protected))
@@ -77,6 +83,8 @@ def evaluate_sites(
         + 0.20 * out["solar_kwh_m2"].rank(pct=True)
     ).round(4)
 
-    audit = out[["site_id", "status", "failed_rule_ids", "S05_hpl_flag", "S06_verify_grid"]].copy()
+    audit = out[[
+        "site_id", "status", "failed_rule_ids", "width_2ap_m", "width_core_pass",
+        "width_methods_disagree", "S05_hpl_flag", "S06_verify_grid",
+    ]].copy()
     return out, audit
-

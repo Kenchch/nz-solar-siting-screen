@@ -5,8 +5,6 @@ from __future__ import annotations
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from shapely.ops import unary_union
-
 from .load import assert_nztm
 
 
@@ -15,8 +13,12 @@ def nearest_distance_m(sites: gpd.GeoDataFrame, network: gpd.GeoDataFrame) -> pd
     assert_nztm(network, "network")
     if network.empty:
         return pd.Series(np.inf, index=sites.index, dtype=float)
-    merged = unary_union(network.geometry.tolist())
-    return sites.geometry.map(lambda geom: float(geom.distance(merged)))
+    if sites.empty:
+        return pd.Series(index=sites.index, dtype=float)
+    joined = gpd.sjoin_nearest(
+        sites[["geometry"]], network[["geometry"]], how="left", distance_col="_distance_m"
+    )
+    return joined.groupby(level=0)["_distance_m"].min().reindex(sites.index).astype(float)
 
 
 def add_grid_proxies(
@@ -46,4 +48,3 @@ def compare_top_n(frame: pd.DataFrame, n: int = 10) -> dict[str, object]:
         "grid_only": sorted(grid - road),
         "road_only": sorted(road - grid),
     }
-

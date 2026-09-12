@@ -5,9 +5,11 @@ from __future__ import annotations
 import argparse
 import csv
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import tempfile
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo
 
 BASE = (
     "https://emidatasets.blob.core.windows.net/publicdata/Datasets/Wholesale/"
@@ -15,10 +17,14 @@ BASE = (
 )
 
 
-def fetch_month(yearmonth: str, node: str, output_dir: Path) -> Path:
+def fetch_month(yearmonth: str, node: str, output_dir: Path, market_timezone: str) -> Path:
     target = output_dir / f"{yearmonth}_{node}.csv"
     if target.exists() and target.stat().st_size > 100:
-        return target
+        with target.open("r", encoding="utf-8") as cached:
+            if {"trading_date", "trading_period", "timestamp_utc"} <= set(
+                next(csv.reader(cached))
+            ):
+                return target
     filename = (
         "202512_FinalEnergyPrices_incomplete.csv"
         if yearmonth == "202512"
@@ -30,7 +36,10 @@ def fetch_month(yearmonth: str, node: str, output_dir: Path) -> Path:
     ) as tmp:
         text = (line.decode("utf-8-sig") for line in response)
         reader = csv.DictReader(text)
-        writer = csv.DictWriter(tmp, fieldnames=["timestamp", "price_nzd_mwh", "node", "source_month"])
+        writer = csv.DictWriter(tmp, fieldnames=[
+            "trading_date", "trading_period", "timestamp_utc",
+            "price_nzd_mwh", "node", "source_month",
+        ])
         writer.writeheader()
         for row in reader:
             poc = row.get("PointOfConnection") or row.get("Node")
@@ -39,9 +48,14 @@ def fetch_month(yearmonth: str, node: str, output_dir: Path) -> Path:
             date = row.get("TradingDate") or row.get("Date")
             period = int(row.get("TradingPeriod") or row.get("Period") or 0)
             price = row.get("DollarsPerMegawattHour") or row.get("Price")
+            trading_date = datetime.strptime(date, "%Y-%m-%d")
+            local_midnight = trading_date.replace(tzinfo=ZoneInfo(market_timezone))
+            instant = local_midnight.astimezone(timezone.utc) + timedelta(minutes=(period - 1) * 30)
             writer.writerow(
                 {
-                    "timestamp": f"{date}T{(period - 1) // 2:02d}:{'30' if period % 2 == 0 else '00'}:00",
+                    "trading_date": date,
+                    "trading_period": period,
+                    "timestamp_utc": instant.isoformat().replace("+00:00", "Z"),
                     "price_nzd_mwh": price,
                     "node": node,
                     "source_month": yearmonth,
@@ -59,13 +73,17 @@ def main() -> None:
     parser.add_argument("--node", default="ISL0661")
     parser.add_argument("--output", default="data/raw/ea_prices")
     parser.add_argument("--workers", type=int, default=6)
+    parser.add_argument("--timezone", default="Pacific/Auckland")
     args = parser.parse_args()
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
     months = [f"{year}{month:02d}" for year in range(args.start_year, args.end_year + 1) for month in range(1, 13)]
     completed: list[Path] = []
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futures = {pool.submit(fetch_month, month, args.node, output): month for month in months}
+        futures = {
+            pool.submit(fetch_month, month, args.node, output, args.timezone): month
+            for month in months
+        }
         for future in as_completed(futures):
             completed.append(future.result())
             print(f"downloaded {futures[future]}", flush=True)

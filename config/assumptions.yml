@@ -6,8 +6,8 @@ project:
 siting:
   minimum_area_ha: 20.0
   minimum_average_width_m: 180.0
-  maximum_reject_rate: 0.80
-  top_n_comparison: 10
+  maximum_reject_rate: 0.55
+  top_n_comparison: 4
   usable_lcdb_classes:
     - High Producing Exotic Grassland
     - Low Producing Grassland
@@ -17,22 +17,14 @@ siting:
 
 solar:
   latitude_deg: -43.55
-  longitude_deg: 172.45
-  standard_meridian_deg: 180.0
-  annual_irradiation_kwh_m2: 1420.0
-  reference_irradiation_kwh_m2: 1000.0
-  performance_ratio: 0.82
   target_capacity_factor: 0.175
-  capacity_factor_sensitivity:
-    - 0.14
-    - 0.175
-    - 0.21
+  shaping_exponent: 1.15
+  shaping_exponent_sensitivity:
+    - 1.0
+    - 1.15
+    - 1.3
   timestep_minutes: 30
 
 market:
   node: ISL0661
   timezone: Pacific/Auckland
-  price_floor_nzd_mwh: -1000.0
-  price_cap_nzd_mwh: 20000.0
-  flat_shape_label: Flat output comparator
-

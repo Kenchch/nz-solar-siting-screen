@@ -1,6 +1,6 @@
 # Data acquisition
 
-Raw files are intentionally excluded from Git. Record every downloaded file in `checksums.sha256` and transform all spatial inputs to EPSG:2193 before screening.
+Full raw files are intentionally excluded from Git. Record every downloaded file in `checksums.sha256` and transform all spatial inputs to EPSG:2193 before screening. The filtered, gzip-compressed ISL0661 series in `data/derived/` is the committed deterministic market input used by CI.
 
 | Input | Publisher / entry point | Access and licence | Retrieved for this repository |
 |---|---|---|---|
@@ -21,9 +21,8 @@ Raw files are intentionally excluded from Git. Record every downloaded file in `
 
 ## Electricity prices
 
-The current canonical discovery page is the Electricity Authority **Data & Insights** hub. The old EMI URLs may redirect to the same public Azure-hosted files and remain useful as stable machine-download paths. This was checked on 13 September 2026. `scripts/download_ea_prices.py` downloads monthly official CSVs, filters to `ISL0661`, and stores the filtered result only.
+The current canonical discovery page is the Electricity Authority **Data & Insights** hub. The old EMI URLs may redirect to the same public Azure-hosted files and remain useful as stable machine-download paths. This was checked on 13 September 2026. `scripts/download_ea_prices.py` downloads monthly official CSVs, filters to `ISL0661`, preserves trading date and period, and creates an unambiguous UTC timestamp. Daylight-saving start/end days contain 46/50 periods respectively; no wall-clock string is used as a join key.
 
 ## Demo boundary
 
 `python scripts/reproduce.py --demo` uses deterministic synthetic NZTM geometries so the complete control flow can run without portal credentials. These geometries are visibly labelled **DEMO** in every output and are not statements about real parcels. Real-data claims must be regenerated after supplying the source layers above.
-

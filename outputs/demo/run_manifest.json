@@ -5,6 +5,7 @@
   "candidates": 8,
   "quarantine": 4,
   "reject_rate": 0.3333,
+  "width_method_disagreements": 1,
   "grid_comparison": {
     "n": 4,
     "overlap_count": 2,
