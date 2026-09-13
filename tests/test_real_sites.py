@@ -179,3 +179,54 @@ def test_every_configured_layer_declares_a_portal_and_an_id():
     assert len(REAL["bbox_nztm"]) == 4
     minx, miny, maxx, maxy = (float(v) for v in REAL["bbox_nztm"])
     assert minx < maxx and miny < maxy
+
+
+def test_a_placeholder_key_is_refused_before_any_request(monkeypatch):
+    """Pasting the documented example verbatim must fail with a readable reason.
+
+    Without this the run reaches the service and comes back HTTP 400, which
+    reads like a broken query rather than an unset credential.
+    """
+    monkeypatch.setenv("LRIS_API_KEY", "your-lris-key")
+    with pytest.raises(build.MissingCredential, match="example placeholder"):
+        build.api_key("LRIS_API_KEY")
+
+
+def test_an_implausibly_short_key_is_refused(monkeypatch):
+    monkeypatch.setenv("LINZ_API_KEY", "abc123")
+    with pytest.raises(build.MissingCredential, match="shorter than any key"):
+        build.api_key("LINZ_API_KEY")
+
+
+def test_a_plausible_key_is_accepted(monkeypatch):
+    monkeypatch.setenv("LINZ_API_KEY", "c01m2c6bk70gfrm3t81gag2xje6")
+    assert build.api_key("LINZ_API_KEY") == "c01m2c6bk70gfrm3t81gag2xje6"
+
+
+def test_the_credential_error_names_the_page_to_get_a_key_from(monkeypatch):
+    monkeypatch.delenv("LINZ_API_KEY", raising=False)
+    with pytest.raises(build.MissingCredential, match=r"data\.linz\.govt\.nz/my/api/"):
+        build.api_key("LINZ_API_KEY")
+
+
+def test_service_errors_explain_the_status_and_never_echo_the_url():
+    """The request URL carries the key, so it must not reach a message."""
+    import urllib.error
+
+    def raising(*args, **kwargs):
+        raise urllib.error.HTTPError(
+            "https://example.test/services;key=SECRET/wfs?x=1", 403, "Forbidden", {}, None
+        )
+
+    original = build.urlopen
+    build.urlopen = raising
+    try:
+        with pytest.raises(build.ServiceError) as caught:
+            build._request("https://example.test/services;key=SECRET/wfs?x=1", 5, "layer-104400")
+    finally:
+        build.urlopen = original
+    message = str(caught.value)
+    assert "403" in message
+    assert "accept the licence" in message
+    assert "layer-104400" in message
+    assert "SECRET" not in message

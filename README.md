@@ -237,8 +237,16 @@ solar-screen --sites data/derived/real/sites.gpkg \
   --roads data/derived/real/roads.gpkg --output outputs/real
 ```
 
-`build_real_sites.py` pulls each layer over WFS, clips it to the study bounding
-box, projects to EPSG:2193, and assembles the four attributes the screen
+It runs a **preflight** first: one cheap `DescribeFeatureType` per layer, so a
+bad key or a wrong layer id surfaces in seconds instead of twenty minutes into
+paging. Set the keys as environment variables — the script refuses an unset key,
+the documentation's own placeholder text, and anything too short to be a real
+key, each with the page to copy the key from. Portal errors come back as one
+line naming the status and what to check; the request URL carries the key, so it
+never appears in a message.
+
+`build_real_sites.py` then pulls each layer over WFS, clips it to the study
+bounding box, projects to EPSG:2193, and assembles the four attributes the screen
 requires: LCDB polygons of the configured usable classes become the candidate
 sites, and LUC class and solar resource are attached by a point-in-polygon
 lookup at each polygon's representative point.
@@ -376,7 +384,7 @@ The market series are different: both the ISL0661 half-hourly final prices and t
 
 ## Validation
 
-One hundred and twenty-eight automated tests cover shared configuration and both CLIs, CRS/schema/geometry gates, exclusion and flag rules, both width methods, candidate-only ranking, spatial-indexed nearest distance, configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, strict market-value input validity, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry, seasonal/intraday decomposition, the metered load control, sensitivities, OSM voltage tiers, terrain and water rules, aerial-review evidence, the real-data assembly path against fixtures — publisher column spellings, multipart splitting, geometry-derived identifiers, the refusal to run without an API key — the rule register as a contract against the library that implements it, the single S-06 implementation and its refusal to flag on rank shift, the held-out sample B scorecard, and top-to-bottom notebook execution.
+One hundred and thirty-three automated tests cover shared configuration and both CLIs, CRS/schema/geometry gates, exclusion and flag rules, both width methods, candidate-only ranking, spatial-indexed nearest distance, configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, strict market-value input validity, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry, seasonal/intraday decomposition, the metered load control, sensitivities, OSM voltage tiers, terrain and water rules, aerial-review evidence, the real-data assembly path against fixtures — publisher column spellings, multipart splitting, geometry-derived identifiers, the refusal to run without an API key, on a placeholder key or on an implausibly short one, and portal errors that name the status without echoing the key — the rule register as a contract against the library that implements it, the single S-06 implementation and its refusal to flag on rank shift, the held-out sample B scorecard, and top-to-bottom notebook execution.
 
 GitHub Actions installs the committed lock, reruns both complete pipelines and compares the full tracked output-file manifest. It strictly diffs CSV/JSON; because GeoPackage and PNG bytes vary across operating systems, `scripts/verify_reproduced_outputs.py` compares GeoPackages by fields and geometry and applies a bounded pixel-difference check to every generated figure. Binary outputs are therefore covered without requiring byte-identical cross-platform files.
 

@@ -34,7 +34,7 @@ import json
 import os
 from pathlib import Path
 import sys
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -51,23 +51,65 @@ PAGE_SIZE = 5000
 
 
 class MissingCredential(RuntimeError):
-    """Raised when a portal API key is not present in the environment."""
+    """Raised when a portal API key is absent, or is obviously not a key."""
+
+
+class ServiceError(RuntimeError):
+    """Raised when a portal rejects or fails a request, with what to check."""
+
+
+KEY_PAGES = {
+    "LRIS_API_KEY": "https://lris.scinfo.org.nz/my/api/",
+    "LINZ_API_KEY": "https://data.linz.govt.nz/my/api/",
+}
+# The documentation's own example strings. Pasting the example verbatim is the
+# most likely way to end up with a set-but-useless variable, and a 400 from the
+# service is a poor way to find that out.
+PLACEHOLDERS = {"your-lris-key", "your-linz-key", "your-key", "...", "changeme"}
 
 
 def api_key(variable: str) -> str:
     value = os.environ.get(variable, "").strip()
+    page = KEY_PAGES.get(variable, "the portal's API key page")
     if not value:
         raise MissingCredential(
-            f"{variable} is not set. Register a free account, create an API key and export it. "
-            "LRIS: https://lris.scinfo.org.nz  LINZ: https://data.linz.govt.nz"
+            f"{variable} is not set. Register a free account, create an API key at {page} "
+            f"and export it."
+        )
+    if value.lower() in PLACEHOLDERS:
+        raise MissingCredential(
+            f"{variable} is set to the example placeholder {value!r}, not a real key. "
+            f"Copy the key from {page}."
+        )
+    if len(value) < 20:
+        raise MissingCredential(
+            f"{variable} is {len(value)} characters, which is shorter than any key these "
+            f"portals issue. Copy the key from {page}."
         )
     return value
 
 
-def _request(url: str, timeout: int) -> bytes:
+def _request(url: str, timeout: int, layer: str = "") -> bytes:
     request = Request(url, headers={"User-Agent": "nz-solar-siting-screen real-data assembly"})
-    with urlopen(request, timeout=timeout) as response:
-        return response.read()
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            return response.read()
+    except HTTPError as error:
+        # The URL carries the key, so it must never appear in a message.
+        hint = {
+            400: "the service rejected the request; the usual cause is a malformed API key, "
+                 "then a layer id that is not a WFS feature type",
+            401: "the API key was not accepted",
+            403: "the API key is not authorised for this layer; accept the licence on the "
+                 "layer's portal page, then retry",
+            404: "no such layer id on this portal",
+            429: "rate limited; wait and retry",
+        }.get(error.code, "unexpected response")
+        raise ServiceError(
+            f"{layer or 'request'} failed: HTTP {error.code} {error.reason} - {hint}"
+        ) from None
+    except URLError as error:
+        raise ServiceError(f"{layer or 'request'} failed: {error.reason}") from None
 
 
 def describe_layer(service: str, key: str, layer_id: int, timeout: int) -> str:
@@ -77,8 +119,8 @@ def describe_layer(service: str, key: str, layer_id: int, timeout: int) -> str:
         "typeNames": f"layer-{layer_id}", "outputFormat": "application/json",
     })
     try:
-        payload = json.loads(_request(f"{service};key={key}/wfs?{query}", timeout))
-    except (HTTPError, ValueError):
+        payload = json.loads(_request(f"{service};key={key}/wfs?{query}", timeout, f"layer-{layer_id}"))
+    except (ServiceError, ValueError):
         return "unknown (DescribeFeatureType unavailable)"
     types = payload.get("featureTypes") or []
     return str(types[0].get("typeName", "unknown")) if types else "unknown"
@@ -98,7 +140,9 @@ def fetch_layer(
             "bbox": ",".join(f"{value:.1f}" for value in bbox) + ",EPSG:2193",
             "count": PAGE_SIZE, "startIndex": start,
         })
-        payload = json.loads(_request(f"{service};key={key}/wfs?{query}", timeout))
+        payload = json.loads(
+            _request(f"{service};key={key}/wfs?{query}", timeout, f"layer-{layer_id}")
+        )
         features = payload.get("features") or []
         if not features:
             break
@@ -201,6 +245,30 @@ def write_layer(frame: gpd.GeoDataFrame, path: Path, layer: str) -> int:
     return int(len(frame))
 
 
+def preflight(services: dict[str, tuple[str, str]], layers: dict, timeout: int) -> None:
+    """Check every layer id answers before downloading any of them.
+
+    A run that dies on the sixth layer after twenty minutes of paging has wasted
+    the twenty minutes. One cheap request each says up front whether the keys
+    work and whether every id is a real feature type.
+    """
+    print("preflight:", flush=True)
+    problems: list[str] = []
+    for name, spec in layers.items():
+        service, key = services[spec["portal"]]
+        layer_id = int(spec["layer_id"])
+        title = describe_layer(service, key, layer_id, timeout)
+        marker = "?" if title.startswith("unknown") else " "
+        print(f" {marker} {name:<12} layer-{layer_id:<7} {title}", flush=True)
+        if title.startswith("unknown"):
+            problems.append(f"{name} (layer-{layer_id}, {spec['portal']})")
+    if problems:
+        raise ServiceError(
+            "these layers did not describe themselves: " + ", ".join(problems)
+            + ". Check the API key, and check each layer id against its portal page."
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="config/assumptions.yml")
@@ -221,12 +289,13 @@ def main() -> None:
         "linz": (settings["linz_service"], api_key("LINZ_API_KEY")),
     }
 
+    preflight(services, layers, arguments.timeout)
+
     downloaded: dict[str, gpd.GeoDataFrame] = {}
     for name, spec in layers.items():
         service, key = services[spec["portal"]]
         layer_id = int(spec["layer_id"])
-        title = describe_layer(service, key, layer_id, arguments.timeout)
-        print(f"  {name}: layer-{layer_id} -> {title}", flush=True)
+        print(f"  {name}: downloading layer-{layer_id}", flush=True)
         frame = fetch_layer(service, key, layer_id, bbox, arguments.timeout)
         if frame.empty:
             raise RuntimeError(
@@ -270,4 +339,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (MissingCredential, ServiceError) as error:
+        # These are the user's problems to fix, not stack traces to read.
+        print(f"\n{error}", file=sys.stderr)
+        raise SystemExit(2) from None
