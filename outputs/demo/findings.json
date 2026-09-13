@@ -304,7 +304,7 @@
       "second_pass": {
         "confirmed": 19,
         "corrected": 1,
-        "author_confirmed": 0
+        "author_confirmed": 20
       },
       "log": "data/aerial_review_log.csv"
     }

@@ -12,12 +12,16 @@ reader can check a claim without re-fetching anything.
 on a grass airstrip, a sand island in the lagoon, the distance to a surf line —
 so a verdict can be falsified against the picture rather than taken on trust.
 
-**Who reviewed these.** Two passes, both by an AI agent (Claude Opus 5) working
-in the repository author's session, from these images. The log records the
-reviewer, both pass dates and a `second_pass_result` per site, and keeps an
-`author_confirmed_on` column that is empty until a person signs the verdicts
-off. To check any of them yourself, open the image here or the `basemaps_url`
-in the queue file.
+**Who reviewed these.** Three passes, each recorded separately. An AI agent
+(Claude Opus 5) made a first pass and an independent second pass over these
+images; the repository author then reviewed all twenty and confirmed them on
+13 September 2026. The log carries `reviewer`, `second_pass_on`,
+`second_pass_result` and `author_confirmed_on` so the three are distinguishable
+rather than collapsed into one claim. To check any of them yourself, open the
+image here or the `basemaps_url` in the queue file.
+
+The verdicts are a human-confirmed screening judgement from aerial imagery. They
+are not a site visit and not a signed technical assessment.
 
 The second pass confirmed all twenty verdicts and corrected two things. The
 first pass had taken the per-tile width for the mosaic width, so the distances

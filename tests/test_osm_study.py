@@ -217,11 +217,13 @@ def test_exclusion_and_flagging_are_reported_separately(summary):
     assert check["excluded_by_slope"] + check["excluded_by_water"] == check["excluded_total"]
 
 
-def test_the_second_pass_is_recorded(summary):
-    """Both passes are AI passes until a person says otherwise."""
-    second = summary["aerial_review"]["second_pass"]
-    assert second["confirmed"] + second["corrected"] == summary["aerial_review"]["reviewed"]
+def test_the_review_passes_are_recorded_separately(summary):
+    """Three passes, distinguishable: two AI passes and the author's confirmation."""
+    review = summary["aerial_review"]
+    second = review["second_pass"]
+    assert second["confirmed"] + second["corrected"] == review["reviewed"]
     assert second["corrected"] >= 1, "the second pass found and fixed a real error"
+    assert second["author_confirmed"] == review["reviewed"]
 
 
 def test_the_aerial_sample_selection_is_declared(summary):
@@ -241,6 +243,9 @@ def test_every_logged_verdict_cites_an_image_that_exists():
     # The reviewer field must say who actually made the call.
     assert log["reviewer"].str.contains("AI agent").all()
     assert log["second_pass_result"].isin({"confirmed", "corrected"}).all()
+    # The author's confirmation is its own column, never folded into `reviewer`.
+    assert log["author_confirmed_on"].notna().all()
+    assert not log["reviewer"].str.contains("author", case=False).any()
 
 
 def test_the_scope_field_lists_the_rules_actually_applied(summary):
