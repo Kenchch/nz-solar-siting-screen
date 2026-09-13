@@ -98,3 +98,17 @@ def test_the_tilt_correction_size_matches_the_sensitivity_table():
     assert f"{mean:.1f} points on the period mean" in line, line
     for tilt_deg in (0.0, 25.0):
         assert f"{tilt.loc[tilt_deg, 'minimum_capture_rate'] * 100:.1f}%" in line
+
+
+@pytest.mark.parametrize("path", ["README.md", "docs/index.html"])
+def test_variance_explained_is_always_qualified_as_rank_variance(path: str):
+    """Spearman's rho squared explains rank variance, not variance in metres.
+
+    The correction reached the README and not the dashboard, which left the two
+    published surfaces disagreeing about what the same number means.
+    """
+    text = (ROOT / path).read_text(encoding="utf-8")
+    for line in text.splitlines():
+        if "14%" not in line and "14.3%" not in line:
+            continue
+        assert "rank" in line, f"{path}: variance not qualified as rank variance: {line[:120]}"
