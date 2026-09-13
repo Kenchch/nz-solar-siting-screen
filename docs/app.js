@@ -89,7 +89,7 @@ function renderOsmStudy(study) {
   };
   const tiers = Object.keys(names).filter(tier => study.median_distance_m[`${tier}_m`] !== undefined);
   const rows = tiers.map(tier => {
-    const correlation = study.rank_correlation[`${tier}_m|road_m`];
+    const correlation = study.rank_correlation[`${tier}_m|road_m`].spearman_rho;
     const highlight = tier === study.connection_tier;
     return `
     <tr>
@@ -97,7 +97,7 @@ function renderOsmStudy(study) {
         ${highlight ? "<br><small>what a project actually connects to</small>" : ""}</td>
       <td>${study.voltage_tier_features[tier].toLocaleString("en-NZ")}</td>
       <td>${metres(study.median_distance_m[`${tier}_m`])}</td>
-      <td>${correlation.toFixed(2)}</td>
+      <td>${correlation.toFixed(2)}<br><small>r&sup2; ${(study.rank_correlation[`${tier}_m|road_m`].variance_explained * 100).toFixed(1)}%</small></td>
     </tr>`;
   });
   rows.push(`

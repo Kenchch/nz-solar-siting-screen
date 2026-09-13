@@ -50,10 +50,46 @@
       "road_m": 450.2
     },
     "rank_correlation": {
-      "transmission_110kv_plus_m|road_m": 0.0416,
-      "subtransmission_33_66kv_m|road_m": 0.1103,
-      "distribution_22kv_m|road_m": 0.4725,
-      "subtransmission_33_66kv_m|transmission_110kv_plus_m": 0.3097
+      "transmission_110kv_plus_m|road_m": {
+        "spearman_rho": 0.0401,
+        "p_value": 0.0516,
+        "variance_explained": 0.0016,
+        "confidence_interval_95": [
+          -0.0003,
+          0.0804
+        ],
+        "n": 2356
+      },
+      "subtransmission_33_66kv_m|road_m": {
+        "spearman_rho": 0.1082,
+        "p_value": 1.39e-07,
+        "variance_explained": 0.0117,
+        "confidence_interval_95": [
+          0.0682,
+          0.148
+        ],
+        "n": 2356
+      },
+      "distribution_22kv_m|road_m": {
+        "spearman_rho": 0.4781,
+        "p_value": 7.39e-135,
+        "variance_explained": 0.2286,
+        "confidence_interval_95": [
+          0.4463,
+          0.5087
+        ],
+        "n": 2356
+      },
+      "subtransmission_33_66kv_m|transmission_110kv_plus_m": {
+        "spearman_rho": 0.3104,
+        "p_value": 8.85e-54,
+        "variance_explained": 0.0963,
+        "confidence_interval_95": [
+          0.2734,
+          0.3464
+        ],
+        "n": 2356
+      }
     },
     "median_rank_shift": {
       "transmission_110kv_plus_m|road_m": 658,

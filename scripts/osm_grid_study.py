@@ -40,10 +40,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from scipy import stats
+
 from nz_solar_siting.config import load_project_config, verify_data_checksums
 from nz_solar_siting.geometry import area_hectares, has_width_core
-from nz_solar_siting.grid_distance import compare_top_n, nearest_distance_m
-from nz_solar_siting.osm_layers import read_osm_layer, read_osm_layers, split_by_voltage
+from nz_solar_siting.grid_distance import (
+    compare_top_n,
+    grid_review_distance_m,
+    nearest_distance_m,
+    split_by_voltage,
+    verify_grid_flag,
+)
+from nz_solar_siting.osm_layers import read_osm_layer, read_osm_layers
 
 SHORTLIST_SIZES = (10, 25, 50, 100, 250, 500)
 TIER_COLOURS = {
@@ -53,7 +61,32 @@ TIER_COLOURS = {
 }
 
 
-def screen_geometry(farmland: gpd.GeoDataFrame, config: SitingConfig) -> gpd.GeoDataFrame:
+def rank_correlation(left: pd.Series, right: pd.Series) -> dict[str, object]:
+    """Spearman correlation with its p-value and a Fisher confidence interval.
+
+    A correlation this small invites two opposite misreadings. It is not "no
+    relationship": at this sample size rho = 0.11 is comfortably significant.
+    Nor is it a usable predictor: it explains about 1% of the variance. Both
+    numbers are published so that neither claim can be made on its own.
+    """
+    result = stats.spearmanr(left, right)
+    rho = float(result.statistic)
+    n = int(min(left.notna().sum(), right.notna().sum()))
+    interval: list[float] | None = None
+    if n > 3 and abs(rho) < 1.0:
+        z = np.arctanh(rho)
+        margin = 1.959963985 / np.sqrt(n - 3)
+        interval = [round(float(np.tanh(z - margin)), 4), round(float(np.tanh(z + margin)), 4)]
+    return {
+        "spearman_rho": round(rho, 4),
+        "p_value": float(f"{float(result.pvalue):.3g}"),
+        "variance_explained": round(rho ** 2, 4),
+        "confidence_interval_95": interval,
+        "n": n,
+    }
+
+
+def screen_geometry(farmland: gpd.GeoDataFrame, config) -> gpd.GeoDataFrame:
     """Apply only the rules that open OSM geometry can actually support."""
     sites = farmland.copy()
     sites["area_ha"] = sites.geometry.map(area_hectares)
@@ -115,9 +148,11 @@ def main() -> None:
     project_config = load_project_config(ROOT / "config" / "assumptions.yml")
     assumptions = project_config.assumptions
     study_config = assumptions["osm_study"]
-    tiers = study_config["voltage_tiers"]
-    connection_tier = str(study_config["connection_tier"])
     config = project_config.siting
+    # S-06 and the voltage tiers come from the library, so the study cannot
+    # drift away from what the screen itself does.
+    tiers = {tier.name: tier for tier in config.voltage_tiers}
+    connection_tier = config.connection_tier
     output = (ROOT / arguments.output).resolve()
     if output == ROOT or not output.is_relative_to(ROOT):
         raise ValueError("--output must be a directory inside the repository")
@@ -134,7 +169,7 @@ def main() -> None:
     ))
     farmland, powerlines, roads, wetland, coastline = read_osm_layers(osm_dir)
     networks, tier_counts = split_by_voltage(
-        powerlines, tiers, float(study_config["excluded_voltage_v"])
+        powerlines, config.voltage_tiers, config.excluded_voltage_v, config.voltage_column
     )
     networks["road"] = roads
 
@@ -162,8 +197,9 @@ def main() -> None:
     # is deliberately not part of it either: rank_shift_review = 3 was chosen
     # against eight demo fixtures and is meaningless at this sample size, where
     # the median shift runs to the hundreds. The shift stays a published column.
-    review_distance = float(tiers[connection_tier]["review_distance_m"])
-    sites["S06_verify_grid"] = sites[f"{connection_tier}_m"] > review_distance
+    review_distance = grid_review_distance_m(config)
+    sites["grid_line_m"] = sites[f"{connection_tier}_m"]
+    sites["S06_verify_grid"] = verify_grid_flag(sites, config)
 
     # Terrain and water. The aerial review found that none of the screen's worst
     # false positives was a grid problem: they were steep, wet or coastal, and
@@ -186,7 +222,10 @@ def main() -> None:
 
     sweeps: dict[str, pd.DataFrame] = {}
     for left, right in pairs:
-        comparison = sites.rename(columns={left: "grid_line_m", right: "road_proxy_m"})
+        # grid_line_m already holds the connection tier; drop it so renaming a
+        # different pair into those names cannot create duplicate columns.
+        comparison = sites.drop(columns=["grid_line_m", "road_proxy_m"], errors="ignore")
+        comparison = comparison.rename(columns={left: "grid_line_m", right: "road_proxy_m"})
         sweep = pd.DataFrame(
             [compare_top_n(comparison, n) for n in SHORTLIST_SIZES if n <= len(sites)]
         )
@@ -215,10 +254,7 @@ def main() -> None:
             column: round(float(np.percentile(sites[column], 90)), 1) for column in proxies
         },
         "rank_correlation": {
-            f"{left}|{right}": round(
-                float(sites[left.replace("_m", "_rank")].corr(sites[right.replace("_m", "_rank")])),
-                4,
-            )
+            f"{left}|{right}": rank_correlation(sites[left], sites[right])
             for left, right in pairs
         },
         "median_rank_shift": {
@@ -230,8 +266,8 @@ def main() -> None:
             for left, right in pairs
         },
         "beyond_tier_review_distance": {
-            name: int((sites[f"{name}_m"] > float(bounds["review_distance_m"])).sum())
-            for name, bounds in tiers.items()
+            name: int((sites[f"{name}_m"] > tier.review_distance_m).sum())
+            for name, tier in tiers.items()
         },
         "verify_grid_flagged": int(sites["S06_verify_grid"].sum()),
         "terrain_water": {

@@ -17,14 +17,15 @@ from nz_solar_siting.osm_layers import (
     read_osm_layers,
     split_by_voltage,
 )
+from nz_solar_siting.siting import SitingConfig
 
 ROOT = Path(__file__).resolve().parents[1]
 OSM_DIR = ROOT / "data" / "derived" / "osm"
 STUDY = ROOT / "outputs" / "osm" / "osm_grid_study.json"
-STUDY_CONFIG = yaml.safe_load(
-    (ROOT / "config" / "assumptions.yml").read_text(encoding="utf-8")
-)["osm_study"]
-CONNECTION = STUDY_CONFIG["connection_tier"]
+ASSUMPTIONS = yaml.safe_load((ROOT / "config" / "assumptions.yml").read_text(encoding="utf-8"))
+SITING = ASSUMPTIONS["siting"]
+TIERS = SITING["voltage_tiers"]
+CONNECTION = SITING["connection_tier"]
 
 
 @pytest.fixture(scope="module")
@@ -76,7 +77,7 @@ def test_untagged_voltage_is_not_guessed():
 def test_tiers_partition_every_line_exactly_once():
     powerlines = read_osm_layer("powerlines", OSM_DIR)
     _, counts = split_by_voltage(
-        powerlines, STUDY_CONFIG["voltage_tiers"], float(STUDY_CONFIG["excluded_voltage_v"])
+        powerlines, SitingConfig().voltage_tiers, float(SITING["excluded_voltage_v"])
     )
     assert sum(counts.values()) == len(powerlines)
     assert counts["excluded_above_threshold"] > 0, "the HVDC ways must be excluded, not tiered"
@@ -90,7 +91,7 @@ def test_a_66kv_way_is_tiered_by_voltage_not_by_its_power_tag():
         {"power": ["line", "minor_line"], "voltage": ["66000", "66000"]},
         geometry=geometry, crs="EPSG:2193",
     )
-    split, _ = split_by_voltage(lines, STUDY_CONFIG["voltage_tiers"], 350000)
+    split, _ = split_by_voltage(lines, SitingConfig().voltage_tiers, 350000)
     assert len(split[CONNECTION]) == 2
     assert len(split["transmission_110kv_plus"]) == 0
 
@@ -103,8 +104,10 @@ def test_study_sample_is_large_enough_to_mean_something(summary):
 
 def test_road_distance_predicts_distribution_but_not_the_connection_tier(summary):
     """The published claim, stated as an ordering rather than one number."""
-    correlation = summary["rank_correlation"]
-    transmission = correlation[f"transmission_110kv_plus_m|road_m"]
+    correlation = {
+        pair: value["spearman_rho"] for pair, value in summary["rank_correlation"].items()
+    }
+    transmission = correlation["transmission_110kv_plus_m|road_m"]
     connection = correlation[f"{CONNECTION}_m|road_m"]
     distribution = correlation["distribution_22kv_m|road_m"]
     assert transmission < connection < distribution

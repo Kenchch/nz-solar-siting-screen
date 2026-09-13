@@ -13,9 +13,12 @@ on a grass airstrip, a sand island in the lagoon, the distance to a surf line â€
 so a verdict can be falsified against the picture rather than taken on trust.
 
 **Who reviewed these.** Three passes, each recorded separately. An AI agent
-(Claude Opus 5) made a first pass and an independent second pass over these
-images; the repository author then reviewed all twenty and confirmed them on
-13 September 2026. The log carries `reviewer`, `second_pass_on`,
+(Claude Opus 5) made a first pass and a second pass with the same tooling - same
+agent, same images, so it is a careful re-read and not an independent opinion.
+The repository author then reviewed all twenty and confirmed them on
+13 September 2026. The genuinely independent checks are that confirmation and
+the measured geometry: every distance in the log comes from the polygons, not
+from an estimate off a picture. The log carries `reviewer`, `second_pass_on`,
 `second_pass_result` and `author_confirmed_on` so the three are distinguishable
 rather than collapsed into one claim. To check any of them yourself, open the
 image here or the `basemaps_url` in the queue file.

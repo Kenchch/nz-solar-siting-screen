@@ -9,7 +9,7 @@ from typing import Any
 
 import yaml
 
-from .siting import SitingConfig
+from .siting import SitingConfig, VoltageTier
 
 
 @dataclass(frozen=True)
@@ -33,12 +33,28 @@ def load_project_config(path: str | Path) -> ProjectConfig:
     demo_top_n = int(assumptions["demo"]["top_n_comparison"])
     if min(top_n, demo_top_n) < 1:
         raise ValueError("top-N comparison values must be positive")
+    tiers = tuple(
+        VoltageTier(
+            name=str(name),
+            minimum_v=float(band["minimum_v"]),
+            maximum_v=float(band["maximum_v"]),
+            review_distance_m=float(band["review_distance_m"]),
+        )
+        for name, band in values["voltage_tiers"].items()
+    )
+    connection_tier = str(values["connection_tier"])
+    if connection_tier not in {tier.name for tier in tiers}:
+        raise ValueError(f"siting.connection_tier {connection_tier!r} is not a configured tier")
     siting = SitingConfig(
         minimum_area_ha=float(values["minimum_area_ha"]),
         minimum_average_width_m=float(values["minimum_average_width_m"]),
         usable_lcdb_classes=tuple(values["usable_lcdb_classes"]),
         grid_distance_review_m=float(values["grid_distance_review_m"]),
         rank_shift_review=int(values["rank_shift_review"]),
+        voltage_tiers=tiers,
+        connection_tier=connection_tier,
+        excluded_voltage_v=float(values["excluded_voltage_v"]),
+        voltage_column=str(values["voltage_column"]),
         solar_score_weight=float(weights["solar_resource"]),
         area_score_weight=float(weights["area"]),
     )

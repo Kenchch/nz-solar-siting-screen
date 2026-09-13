@@ -214,8 +214,23 @@ def read_ea_price_csv(path: str, node: str, timezone: str = "Pacific/Auckland") 
     price_col = next((lookup[k] for k in ("price", "final_price", "price_nzd_mwh", "dollarspermegawatthour") if k in lookup), None)
     date_col = next((lookup[k] for k in ("date", "trading_date", "tradingdate") if k in lookup), None)
     period_col = next((lookup[k] for k in ("trading_period", "period", "tp", "tradingperiod") if k in lookup), None)
-    if not all((node_col, price_col, date_col, period_col)):
-        raise ValueError(f"unrecognised EA schema: {list(raw.columns)}")
+    resolved = {
+        "node": node_col, "price": price_col, "trading date": date_col,
+        "trading period": period_col,
+    }
+    missing = sorted(name for name, column in resolved.items() if column is None)
+    if missing:
+        raise ValueError(
+            f"unrecognised EA schema: no column for {', '.join(missing)}. "
+            f"Columns present: {list(raw.columns)}"
+        )
+    # Two source columns resolving to the same target means the guess was wrong,
+    # and silently using one for both would corrupt every downstream number.
+    chosen = [column for column in resolved.values()]
+    if len(set(chosen)) != len(chosen):
+        raise ValueError(
+            f"ambiguous EA schema: {resolved} maps more than one field to the same column"
+        )
     out = raw.loc[raw[node_col].astype(str).str.upper() == node.upper()].copy()
     if out.empty:
         raise PriceDataQualityError(f"no price rows found for node {node}")
