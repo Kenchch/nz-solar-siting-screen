@@ -201,7 +201,9 @@ Scored against the labelled sites, keeping exclusion and flagging apart — the 
 
 First, B is a milder sample by construction: its median rank shift is 2,088 against A's 2,192, and only a quarter of it is bad land rather than half. Selecting on disagreement puts the most extreme cases in A, so a lower failure rate in B is what should happen. Anyone quoting 55% as the screen's false-positive rate is quoting the worst twenty sites in the region.
 
-Second, three of B's five failures are the same landforms the rules were built for — barrier spit, lagoon wetland, estuary margin — and the rules reach all three: one excluded on mapped water, two flagged for coastal review. **The other two are a failure mode that did not appear in A at all**: a rural settlement of lifestyle blocks with dwellings on every title, and a remnant paddock on a town's edge boxed in by a motorway interchange and a rail corridor. Both are tagged farmland in OpenStreetMap and both are flat, dry and inland, so no terrain or water rule can see them. They are land-use failures, and **LCDB would classify both as built-up** — which is the most concrete argument in this repository for finishing the LRIS run.
+Second, three of B's five failures are the same landforms the rules were built for — barrier spit, lagoon wetland, estuary margin — and the rules reach all three: one excluded on mapped water, two flagged for coastal review. **The other two are a failure mode that did not appear in A at all**: a rural settlement of lifestyle blocks with dwellings on every title, and a remnant paddock on a town's edge boxed in by a motorway interchange and a rail corridor. Both are tagged farmland in OpenStreetMap and both are flat, dry and inland, so no terrain or water rule can see them. They are land-use failures.
+
+> **Correction.** This paragraph used to say LCDB would classify both as built-up. It was written without checking, and it is wrong. Queried against the real layer, LCDB calls the lifestyle settlement *"Orchard, Vineyard or Other Perennial Crop"* (22.4 of its 24 ha) and the motorway-fringe block *"High Producing Exotic Grassland"* (48.2 of its 51 ha) — both **usable classes in this screen's own whitelist**. Land cover would have waved both through. What actually excludes them is the **cadastral** layer: the first is six parcels of 4–6 ha, the second is forty parcels with a largest of 10.3 ha, and neither has a single parcel over the 20 ha threshold. The argument for the LRIS run was right; the reason given for it was not.
 
 Third, B produced the rules' first false exclusion: an irrigated cropping block that S-09 threw out because a farm **irrigation pond** touches the polygon. `natural=water` does not distinguish a storage pond from a wetland, and "any intersection" is too blunt a test. The rule is left as it is and the failure is reported, because tuning it on the sample that exposed it is how the in-sample problem started.
 
@@ -282,7 +284,7 @@ Three things about it are worth knowing before the first run:
 **Status of the live run.** It has been run end to end. 27,452 LCDB polygons in
 the study bbox became **1,166 candidate sites** with all four attributes (9 more
 had no LUC or solar value and went to `sites_unattributed`), and the screen
-returned **404 candidates and 762 quarantined**. Sampled LENZ values land at
+returned **404 candidates and 762 quarantined** on that basis. Sampled LENZ values land at
 1,325–1,441 kWh/m²/yr, which is the range the demo fixtures were written to.
 **S-05 now has real land behind it: 197 of the 404 candidates are LUC 1–3**, so
 the NPS-HPL flag is finally pointing at actual Canterbury paddocks rather than
@@ -294,6 +296,41 @@ With all ten rules in the library, slope removes a further **319** sites and
 mapped water **233**. That is the size of the hole: a third of what the screen
 was calling candidates was steep or wet.
 
+### On the parcel basis
+
+Cutting usable cover to parcel boundaries changes the population rather than
+filtering it. The same bounding box yields **10,684 candidate units**, and the
+screen returns **7,312 candidates against 3,372 quarantined**:
+
+| | Land-cover polygons | Parcel ∩ cover |
+|---|---:|---:|
+| Units assembled | 1,166 | 10,684 |
+| Candidates | 404 | 7,312 |
+| Median candidate area | 46.9 ha | **40.2 ha** |
+| Largest candidate | 2,524 ha | **625 ha** |
+| S-05 HPL flagged | 197 | 5,342 |
+
+The largest candidate is now *Lot 2 DP 361816* at 625 ha — an appellation and a
+title reference, which is what turns a polygon into something a reviewer can
+look up. Each unit carries its appellation, title and parcel intent.
+
+Two limitations have to be stated with it:
+
+- **Primary Parcels carry no ownership.** A farm held as several adjacent titles
+  is split into several units and each is measured separately, so a holding that
+  could host a project is understated. Merging adjacent parcels with the same
+  cover and LUC would be a reasonable sensitivity; it is not the headline and is
+  not done here.
+- **A parcel boundary is not a usable boundary.** Fences, centre-pivot circles,
+  shelterbelts, races and yards are all still inside these polygons. The area
+  rule measures title extent, not buildable extent.
+
+**The cheapest validation available** was to re-run sample B's two misses on
+this basis, and it paid: both vanish from the population entirely, because
+neither has a parent parcel over 20 ha. It also corrected the reason I had given
+for them — see the correction above. Land cover would have passed both; the
+cadastre is what catches them.
+
 The assembled layers and the screening outputs are **not committed**. LCDB and
 NZLRI come from the LRIS portal under its item terms, which this project does
 not redistribute; `data/derived/real/` and `outputs/real/` are gitignored, and
@@ -301,11 +338,15 @@ the run is reproducible from the two API keys.
 
 Three things the real run exposed that the demo could not:
 
-- **An LCDB polygon is not a parcel.** Land cover merges across ownership, so
-  the largest polygon the assembly produced was 230,000 ha and the largest
-  surviving candidate is 2,524 ha. The area and width rules pass those
-  trivially. A real shortlist needs LCDB intersected with cadastral parcels
-  (LINZ NZ Primary Parcels), which is the obvious next step and is not done.
+- **An LCDB polygon is not a parcel — so the screening unit is now the
+  intersection.** Land cover merges straight across ownership: the first
+  assembly produced a 230,000 ha polygon and a largest surviving candidate of
+  2,524 ha, neither of which is a thing anyone can buy or lease, and the area
+  and width rules passed both trivially. Candidate units are now
+  **LINZ NZ Primary Land Parcels ∩ usable LCDB cover**. Any unit of at least
+  20 ha needs a parent parcel of at least 20 ha, so the parcel layer is filtered
+  server-side by `calc_area`, which turns 308,928 parcels in the study bbox into
+  about 11,500 and loses nothing.
 - **LINZ Topo50 powerlines carry no voltage attribute** — the layer has
   `t50_fid` and `support_ty` and nothing else. So the voltage tiering has
   nothing to tier on and falls back to the whole layer, which `grid_basis`
