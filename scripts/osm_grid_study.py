@@ -40,10 +40,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from scipy import stats
+
 from nz_solar_siting.config import load_project_config, verify_data_checksums
 from nz_solar_siting.geometry import area_hectares, has_width_core
-from nz_solar_siting.grid_distance import compare_top_n, nearest_distance_m
-from nz_solar_siting.osm_layers import read_osm_layer, read_osm_layers, split_by_voltage
+from nz_solar_siting.grid_distance import (
+    compare_top_n,
+    grid_review_distance_m,
+    nearest_distance_m,
+    split_by_voltage,
+    verify_grid_flag,
+)
+from nz_solar_siting.osm_layers import read_osm_layer, read_osm_layers
 
 SHORTLIST_SIZES = (10, 25, 50, 100, 250, 500)
 TIER_COLOURS = {
@@ -53,7 +61,63 @@ TIER_COLOURS = {
 }
 
 
-def screen_geometry(farmland: gpd.GeoDataFrame, config: SitingConfig) -> gpd.GeoDataFrame:
+def rule_scorecard(sample: pd.DataFrame, name: str, shift_column: str) -> dict[str, object]:
+    """What the frozen rules do to one labelled sample.
+
+    Exclusion and flagging are counted apart, because a flagged site still
+    reaches a human as a candidate. Sample A is in-sample by construction - the
+    thresholds were chosen with its labels in view - and sample B is the
+    held-out check, so the two are never added together.
+    """
+    bad = sample["developable"] == "no"
+    good = sample["developable"] == "yes"
+    excluded = ~sample["terrain_water_pass"]
+    flagged_only = sample["terrain_water_pass"] & sample["S10_coastal_flag"]
+    reviewed = int(sample["finding"].notna().sum())
+    return {
+        "basis": "in-sample: thresholds chosen with these labels in view"
+        if name == "A" else "held out: labelled from imagery after the thresholds were frozen",
+        "reviewed": reviewed,
+        "not_developable": int(bad.sum()),
+        "false_positive_rate": round(float(bad.sum()) / reviewed, 3) if reviewed else None,
+        "median_rank_shift": int(sample[shift_column].median()),
+        "excluded_by_slope": int((bad & ~sample["S08_slope_pass"]).sum()),
+        "excluded_by_water": int((bad & ~sample["S09_water_pass"]).sum()),
+        "excluded_total": int((bad & excluded).sum()),
+        "flagged_only_by_coast": int((bad & flagged_only).sum()),
+        "neither_excluded_nor_flagged": sorted(sample.loc[bad & ~excluded & ~flagged_only, "site_id"]),
+        "developable_sites_wrongly_excluded": int((good & excluded).sum()),
+        "wrongly_excluded": sorted(sample.loc[good & excluded, "site_id"]),
+        "developable_sites_flagged_only": int((good & flagged_only).sum()),
+    }
+
+
+def rank_correlation(left: pd.Series, right: pd.Series) -> dict[str, object]:
+    """Spearman correlation with its p-value and a Fisher confidence interval.
+
+    A correlation this small invites two opposite misreadings. It is not "no
+    relationship": at this sample size rho = 0.11 is comfortably significant.
+    Nor is it a usable predictor: it explains about 1% of the variance. Both
+    numbers are published so that neither claim can be made on its own.
+    """
+    result = stats.spearmanr(left, right)
+    rho = float(result.statistic)
+    n = int(min(left.notna().sum(), right.notna().sum()))
+    interval: list[float] | None = None
+    if n > 3 and abs(rho) < 1.0:
+        z = np.arctanh(rho)
+        margin = 1.959963985 / np.sqrt(n - 3)
+        interval = [round(float(np.tanh(z - margin)), 4), round(float(np.tanh(z + margin)), 4)]
+    return {
+        "spearman_rho": round(rho, 4),
+        "p_value": float(f"{float(result.pvalue):.3g}"),
+        "variance_explained": round(rho ** 2, 4),
+        "confidence_interval_95": interval,
+        "n": n,
+    }
+
+
+def screen_geometry(farmland: gpd.GeoDataFrame, config) -> gpd.GeoDataFrame:
     """Apply only the rules that open OSM geometry can actually support."""
     sites = farmland.copy()
     sites["area_ha"] = sites.geometry.map(area_hectares)
@@ -109,15 +173,21 @@ def plot_disagreement(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", default="outputs/osm")
-    parser.add_argument("--aerial-sample", type=int, default=20)
+    parser.add_argument(
+        "--aerial-sample", type=int, default=20,
+        help="Sites per labelled sample. Two are drawn: A is the worst N "
+             "disagreements, B the next N, giving a held-out set.",
+    )
     arguments = parser.parse_args()
 
     project_config = load_project_config(ROOT / "config" / "assumptions.yml")
     assumptions = project_config.assumptions
     study_config = assumptions["osm_study"]
-    tiers = study_config["voltage_tiers"]
-    connection_tier = str(study_config["connection_tier"])
     config = project_config.siting
+    # S-06 and the voltage tiers come from the library, so the study cannot
+    # drift away from what the screen itself does.
+    tiers = {tier.name: tier for tier in config.voltage_tiers}
+    connection_tier = config.connection_tier
     output = (ROOT / arguments.output).resolve()
     if output == ROOT or not output.is_relative_to(ROOT):
         raise ValueError("--output must be a directory inside the repository")
@@ -134,7 +204,7 @@ def main() -> None:
     ))
     farmland, powerlines, roads, wetland, coastline = read_osm_layers(osm_dir)
     networks, tier_counts = split_by_voltage(
-        powerlines, tiers, float(study_config["excluded_voltage_v"])
+        powerlines, config.voltage_tiers, config.excluded_voltage_v, config.voltage_column
     )
     networks["road"] = roads
 
@@ -162,13 +232,12 @@ def main() -> None:
     # is deliberately not part of it either: rank_shift_review = 3 was chosen
     # against eight demo fixtures and is meaningless at this sample size, where
     # the median shift runs to the hundreds. The shift stays a published column.
-    review_distance = float(tiers[connection_tier]["review_distance_m"])
-    sites["S06_verify_grid"] = sites[f"{connection_tier}_m"] > review_distance
+    review_distance = grid_review_distance_m(config)
+    sites["grid_line_m"] = sites[f"{connection_tier}_m"]
+    sites["S06_verify_grid"] = verify_grid_flag(sites, config)
 
-    # Terrain and water. The aerial review found that none of the screen's worst
-    # false positives was a grid problem: they were steep, wet or coastal, and
-    # the baseline had no rule for any of that.
-    terrain_config = study_config["terrain"]
+    # Terrain and water come from the library, the same implementation the screen
+    # uses, so the study cannot drift away from what solar-screen applies.
     terrain = pd.read_csv(osm_dir / "site_terrain.csv")
     sites = sites.merge(terrain, on="site_id", how="left", validate="one_to_one")
     if sites["mean_slope_deg"].isna().any():
@@ -177,16 +246,19 @@ def main() -> None:
         )
     sites["water_m"] = nearest_distance_m(sites, wetland).round(1)
     sites["coastline_m"] = nearest_distance_m(sites, coastline).round(1)
-    maximum_slope = float(terrain_config["maximum_mean_slope_deg"])
-    coastal_review = float(terrain_config["coastal_review_distance_m"])
-    sites["S08_slope_pass"] = sites["mean_slope_deg"] <= maximum_slope
-    sites["S09_water_pass"] = sites["water_m"] > 0.0
+    maximum_slope = config.maximum_mean_slope_deg
+    coastal_review = config.coastal_review_distance_m
+    sites["S08_slope_pass"] = ~(sites["mean_slope_deg"] > maximum_slope)
+    sites["S09_water_pass"] = ~(sites["water_m"] <= 0.0)
     sites["S10_coastal_flag"] = sites["coastline_m"] < coastal_review
     sites["terrain_water_pass"] = sites["S08_slope_pass"] & sites["S09_water_pass"]
 
     sweeps: dict[str, pd.DataFrame] = {}
     for left, right in pairs:
-        comparison = sites.rename(columns={left: "grid_line_m", right: "road_proxy_m"})
+        # grid_line_m already holds the connection tier; drop it so renaming a
+        # different pair into those names cannot create duplicate columns.
+        comparison = sites.drop(columns=["grid_line_m", "road_proxy_m"], errors="ignore")
+        comparison = comparison.rename(columns={left: "grid_line_m", right: "road_proxy_m"})
         sweep = pd.DataFrame(
             [compare_top_n(comparison, n) for n in SHORTLIST_SIZES if n <= len(sites)]
         )
@@ -215,10 +287,7 @@ def main() -> None:
             column: round(float(np.percentile(sites[column], 90)), 1) for column in proxies
         },
         "rank_correlation": {
-            f"{left}|{right}": round(
-                float(sites[left.replace("_m", "_rank")].corr(sites[right.replace("_m", "_rank")])),
-                4,
-            )
+            f"{left}|{right}": rank_correlation(sites[left], sites[right])
             for left, right in pairs
         },
         "median_rank_shift": {
@@ -230,11 +299,12 @@ def main() -> None:
             for left, right in pairs
         },
         "beyond_tier_review_distance": {
-            name: int((sites[f"{name}_m"] > float(bounds["review_distance_m"])).sum())
-            for name, bounds in tiers.items()
+            name: int((sites[f"{name}_m"] > tier.review_distance_m).sum())
+            for name, tier in tiers.items()
         },
         "verify_grid_flagged": int(sites["S06_verify_grid"].sum()),
         "terrain_water": {
+            "source": "nz_solar_siting.siting thresholds, the same the screen applies",
             "maximum_mean_slope_deg": maximum_slope,
             "coastal_review_distance_m": coastal_review,
             "median_mean_slope_deg": round(float(sites["mean_slope_deg"].median()), 2),
@@ -256,7 +326,13 @@ def main() -> None:
     # disagreements with coordinates and a deep link, and fold in the findings
     # already recorded so a re-run never discards them.
     shift = shift_column(f"{connection_tier}_m", "road_m")
-    sample = sites.nlargest(arguments.aerial_sample, shift).copy()
+    # Two samples by the same criterion. A was labelled first and the terrain and
+    # water thresholds were chosen with those labels in view, so A can only ever
+    # be in-sample. B is the next N by the same measure, labelled from imagery
+    # after the thresholds were frozen, and is the held-out check.
+    drawn = sites.nlargest(arguments.aerial_sample * 2, shift).copy()
+    drawn["sample"] = ["A"] * arguments.aerial_sample + ["B"] * (len(drawn) - arguments.aerial_sample)
+    sample = drawn
     centroids = sample.geometry.centroid.to_crs("EPSG:4326")
     sample["latitude"] = centroids.y.round(6)
     sample["longitude"] = centroids.x.round(6)
@@ -276,6 +352,9 @@ def main() -> None:
         if not (ROOT / image).exists():
             raise FileNotFoundError(f"aerial review log cites missing evidence: {image}")
     sample = sample.merge(log, on="site_id", how="left", validate="one_to_one")
+    if "sample_x" in sample.columns:  # the log also carries a sample column
+        sample["sample"] = sample["sample_y"].fillna(sample["sample_x"])
+        sample = sample.drop(columns=["sample_x", "sample_y"])
     reviewed = int(sample["finding"].notna().sum())
     not_developable = int((sample["developable"] == "no").sum())
     # Score the new rules against the hand-labelled sample. These thresholds were
@@ -288,37 +367,31 @@ def main() -> None:
     # still reaches a human as a candidate, so it is not "caught".
     excluded = ~sample["terrain_water_pass"]
     flagged_only = sample["terrain_water_pass"] & sample["S10_coastal_flag"]
+    # No pooled figure is published. A is in-sample and B is held out; adding
+    # them would produce a number that means neither thing.
     summary["aerial_review"] = {
         "queued": int(len(sample)),
         "reviewed": reviewed,
-        "not_developable": not_developable,
-        "false_positive_rate": round(not_developable / reviewed, 3) if reviewed else None,
         "selection": (
-            "the largest connection-tier-versus-road rank disagreements; selected on "
-            "disagreement, so this rate describes the road proxy's worst cases and "
-            "not the candidate population"
+            "the largest connection-tier-versus-road rank disagreements; sample A is the "
+            "worst N and sample B the next N. Selected on disagreement, so neither failure "
+            "rate describes the candidate population"
         ),
-        "in_sample_rule_check": {
-            "excluded_by_slope": int((bad & ~sample["S08_slope_pass"]).sum()),
-            "excluded_by_water": int((bad & ~sample["S09_water_pass"]).sum()),
-            "excluded_total": int((bad & excluded).sum()),
-            "flagged_only_by_coast": int((bad & flagged_only).sum()),
-            "neither_excluded_nor_flagged": sorted(
-                sample.loc[bad & ~excluded & ~flagged_only, "site_id"]
-            ),
-            "developable_sites_wrongly_excluded": int((good & excluded).sum()),
-            "developable_sites_flagged_only": int((good & flagged_only).sum()),
+        "by_sample": {
+            name: rule_scorecard(group, name, shift)
+            for name, group in sample.groupby("sample", sort=True)
         },
         "second_pass": {
             "confirmed": int((sample["second_pass_result"] == "confirmed").sum()),
             "corrected": int((sample["second_pass_result"] == "corrected").sum()),
+            "not_required": int((sample["second_pass_result"] == "not_required").sum()),
             "author_confirmed": int(sample["author_confirmed_on"].notna().sum()),
         },
         "log": log_path.relative_to(ROOT).as_posix(),
     }
     (output / "osm_grid_study.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     sample[[
-        "site_id", "area_ha", *proxies, f"{connection_tier}_rank", "road_rank", shift,
+        "site_id", "sample", "area_ha", *proxies, f"{connection_tier}_rank", "road_rank", shift,
         "mean_slope_deg", "water_m", "coastline_m",
         "S08_slope_pass", "S09_water_pass", "S10_coastal_flag",
         "latitude", "longitude", "basemaps_url",

@@ -44,11 +44,26 @@ def test_degenerate_weights_are_rejected():
         _score(replace(SitingConfig(), solar_score_weight=0.0, area_score_weight=0.0))
 
 
-def test_rank_shift_review_threshold_is_configurable():
-    lenient = _score(replace(SitingConfig(), rank_shift_review=99, grid_distance_review_m=1e9))
-    strict = _score(replace(SitingConfig(), rank_shift_review=1, grid_distance_review_m=1e9))
+def test_the_verify_flag_follows_the_review_distance():
+    """S-06 is a distance rule, on the demo layer's fallback basis."""
+    lenient = _score(replace(SitingConfig(), grid_distance_review_m=1e9))
+    strict = _score(replace(SitingConfig(), grid_distance_review_m=1.0))
     assert not lenient.S06_verify_grid.any()
     assert strict.S06_verify_grid.any()
+
+
+def test_rank_shift_cannot_raise_the_verify_flag():
+    """The rule README calls uninformative must not come back through the library.
+
+    rank_shift_review is a count of ranks: it discriminates across eight demo
+    fixtures and fires on essentially every site at n = 2,356. It stays a
+    published column and stays out of S-06.
+    """
+    generous = replace(SitingConfig(), grid_distance_review_m=1e9)
+    for threshold in (1, 3, 99):
+        results = _score(replace(generous, rank_shift_review=threshold))
+        assert not results.S06_verify_grid.any()
+    assert _score(generous).rank_shift.notna().any(), "rank_shift must still be published"
 
 
 def test_published_assumptions_supply_every_siting_parameter():

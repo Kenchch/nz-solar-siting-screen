@@ -7,6 +7,13 @@
   "reject_rate": 0.3333,
   "selection_rate": 0.6667,
   "width_method_disagreements": 1,
+  "rules_not_applied": [
+    "S-08",
+    "S-09",
+    "S-10"
+  ],
+  "slope_unknown": 12,
+  "coastal_review_flagged": 0,
   "grid_comparison": {
     "n": 4,
     "overlap_count": 2,

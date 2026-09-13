@@ -9,3 +9,9 @@ data/raw/*
 !data/raw/.gitkeep
 outputs/runtime/
 data/raw/copernicus_dem/
+
+# Real-data assembly and results. LCDB and NZLRI come from the LRIS portal under
+# its item terms, which this project does not redistribute (see data/README.md),
+# so the assembled layers and everything screened from them stay local.
+data/derived/real/
+outputs/real/

@@ -7,6 +7,13 @@
   "reject_rate": 0.3333,
   "selection_rate": 0.6667,
   "width_method_disagreements": 1,
+  "rules_not_applied": [
+    "S-08",
+    "S-09",
+    "S-10"
+  ],
+  "slope_unknown": 12,
+  "coastal_review_flagged": 0,
   "grid_comparison": {
     "n": 4,
     "overlap_count": 2,
@@ -50,10 +57,46 @@
       "road_m": 450.2
     },
     "rank_correlation": {
-      "transmission_110kv_plus_m|road_m": 0.0416,
-      "subtransmission_33_66kv_m|road_m": 0.1103,
-      "distribution_22kv_m|road_m": 0.4725,
-      "subtransmission_33_66kv_m|transmission_110kv_plus_m": 0.3097
+      "transmission_110kv_plus_m|road_m": {
+        "spearman_rho": 0.0401,
+        "p_value": 0.0516,
+        "variance_explained": 0.0016,
+        "confidence_interval_95": [
+          -0.0003,
+          0.0804
+        ],
+        "n": 2356
+      },
+      "subtransmission_33_66kv_m|road_m": {
+        "spearman_rho": 0.1082,
+        "p_value": 1.39e-07,
+        "variance_explained": 0.0117,
+        "confidence_interval_95": [
+          0.0682,
+          0.148
+        ],
+        "n": 2356
+      },
+      "distribution_22kv_m|road_m": {
+        "spearman_rho": 0.4781,
+        "p_value": 7.39e-135,
+        "variance_explained": 0.2286,
+        "confidence_interval_95": [
+          0.4463,
+          0.5087
+        ],
+        "n": 2356
+      },
+      "subtransmission_33_66kv_m|transmission_110kv_plus_m": {
+        "spearman_rho": 0.3104,
+        "p_value": 8.85e-54,
+        "variance_explained": 0.0963,
+        "confidence_interval_95": [
+          0.2734,
+          0.3464
+        ],
+        "n": 2356
+      }
     },
     "median_rank_shift": {
       "transmission_110kv_plus_m|road_m": 658,
@@ -74,6 +117,7 @@
     },
     "verify_grid_flagged": 372,
     "terrain_water": {
+      "source": "nz_solar_siting.siting thresholds, the same the screen applies",
       "maximum_mean_slope_deg": 10.0,
       "coastal_review_distance_m": 1000.0,
       "median_mean_slope_deg": 0.77,
@@ -286,25 +330,52 @@
       ]
     },
     "aerial_review": {
-      "queued": 20,
-      "reviewed": 20,
-      "not_developable": 11,
-      "false_positive_rate": 0.55,
-      "selection": "the largest connection-tier-versus-road rank disagreements; selected on disagreement, so this rate describes the road proxy's worst cases and not the candidate population",
-      "in_sample_rule_check": {
-        "excluded_by_slope": 4,
-        "excluded_by_water": 4,
-        "excluded_total": 8,
-        "flagged_only_by_coast": 2,
-        "neither_excluded_nor_flagged": [
-          "OSM-1106896738"
-        ],
-        "developable_sites_wrongly_excluded": 0,
-        "developable_sites_flagged_only": 0
+      "queued": 40,
+      "reviewed": 40,
+      "selection": "the largest connection-tier-versus-road rank disagreements; sample A is the worst N and sample B the next N. Selected on disagreement, so neither failure rate describes the candidate population",
+      "by_sample": {
+        "A": {
+          "basis": "in-sample: thresholds chosen with these labels in view",
+          "reviewed": 20,
+          "not_developable": 11,
+          "false_positive_rate": 0.55,
+          "median_rank_shift": 2192,
+          "excluded_by_slope": 4,
+          "excluded_by_water": 4,
+          "excluded_total": 8,
+          "flagged_only_by_coast": 2,
+          "neither_excluded_nor_flagged": [
+            "OSM-1106896738"
+          ],
+          "developable_sites_wrongly_excluded": 0,
+          "wrongly_excluded": [],
+          "developable_sites_flagged_only": 0
+        },
+        "B": {
+          "basis": "held out: labelled from imagery after the thresholds were frozen",
+          "reviewed": 20,
+          "not_developable": 5,
+          "false_positive_rate": 0.25,
+          "median_rank_shift": 2088,
+          "excluded_by_slope": 0,
+          "excluded_by_water": 1,
+          "excluded_total": 1,
+          "flagged_only_by_coast": 2,
+          "neither_excluded_nor_flagged": [
+            "OSM-1047292074",
+            "OSM-230911462"
+          ],
+          "developable_sites_wrongly_excluded": 1,
+          "wrongly_excluded": [
+            "OSM-1468878953"
+          ],
+          "developable_sites_flagged_only": 4
+        }
       },
       "second_pass": {
         "confirmed": 19,
         "corrected": 1,
+        "not_required": 20,
         "author_confirmed": 20
       },
       "log": "data/aerial_review_log.csv"

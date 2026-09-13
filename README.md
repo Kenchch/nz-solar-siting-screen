@@ -2,7 +2,9 @@
 
 > This is a **screening** tool, not a development decision. It ranks candidate areas from open data so that a human can look at fewer of them. The single most important variable in a real solar project — available grid hosting capacity at a specific connection point — is not public at site level and is explicitly out of scope. Nothing here should be read as a statement about any particular parcel of land.
 
-An auditable Python workflow for utility-scale fixed-tilt PV screening in Canterbury, New Zealand. It connects three decisions that are often analysed separately: where open data suggests land may be worth reviewing, how sensitive that ranking is to incomplete network data, and what a simplified solar output shape would have captured at the ISL0661 wholesale node.
+An auditable Python workflow for utility-scale fixed-tilt PV screening in Canterbury, New Zealand. It answers three questions that are usually analysed separately: where open data suggests land may be worth reviewing, how sensitive that ranking is to incomplete network data, and what a simplified solar output shape would have captured at the ISL0661 wholesale node.
+
+They are **reported side by side, not integrated**, and the seams are worth naming. `screen_score` uses solar resource and usable area only, so the capture-rate work has no influence on the site ordering. And the market analysis is one node at one latitude: a candidate that would connect somewhere other than ISL0661 is being shown a Christchurch-flavoured price signal, not its own. Giving each candidate its own nodal value is the obvious next step and is not done here.
 
 [Open the interactive findings dashboard](https://kenchch.github.io/nz-solar-siting-screen/) · [Rule register](rules/rule_register.csv) · [Policy sources](rules/SOURCES.md) · [Data acquisition](data/README.md)
 
@@ -11,8 +13,8 @@ An auditable Python workflow for utility-scale fixed-tilt PV screening in Canter
 ## Two empirical findings, two method warnings
 
 1. **Empirical — generation is not revenue, and the reason is seasonal, not midday cannibalisation.** Official Electricity Authority half-hourly final prices at ISL0661 give apparent-solar-time capture rates from **82.5% to 110.3%** over 2019–2025 for a north-facing 25° array. Five of seven annual values are below 100%; 2019 and 2023 are above it. The worst year is 2024 at **82.5%**, a gap of 17.5 points below the time-average price. The decomposition below attributes **−17.7 points of it to seasonal mismatch**; the intraday term is **+0.2 points**, so the shape of the day actually gave a little value back. The discount is dry-year winter prices arriving when a fixed-tilt array produces least, not midday price suppression.
-2. **Empirical — a road proxy tracks the low-voltage network, not the one a project can connect to.** Measured on **2,356 real Canterbury farmland polygons** that pass the area and width rules, against mapped OpenStreetMap lines split by voltage. Rank correlation with distance-to-road: **0.47** for ≤22 kV distribution, **0.11** for the 33–66 kV tier a Canterbury project actually connects at, **0.04** for ≥110 kV transmission. Roads find the poles that are everywhere and say almost nothing about the connection that matters. This is why both distances and a `verify_grid` flag stay visible and why grid distance was removed from `screen_score` entirely. See [the OSM study](#measuring-the-grid-proxy-disagreement-on-real-geometry) for the caveats, which are substantial.
-3. **Method warning — the screen was missing terrain and water, and an aerial check is what found it.** Of the twenty largest grid-proxy disagreements, **11 are not developable land at all** — coastal barrier spit, wetland margin, or 14–24° peninsula slope. None is a grid problem. S-08 slope was documented as "not implemented" and there was no water or coastal rule at all; all three now exist, built from free inputs, and they **exclude 8 of those 11, flag 2 more, and miss 1**. That sample was selected on disagreement, so the 55% is the road proxy's worst cases, not a population rate.
+2. **Empirical — a road proxy tracks the low-voltage network, not the one a project can connect to.** Measured on **2,356 real Canterbury farmland polygons** that pass the area and width rules, against mapped OpenStreetMap lines split by voltage. Spearman rank correlation with distance-to-road: **0.47** for ≤22 kV distribution, **0.11** for the 33–66 kV tier a Canterbury project actually connects at, **0.04** for ≥110 kV transmission — all significant at n = 2,356, and the middle one explains about 1% of the variance. Roads find the poles that are everywhere and say almost nothing about the connection that matters. This is why both distances and a `verify_grid` flag stay visible and why grid distance was removed from `screen_score` entirely. See [the OSM study](#measuring-the-grid-proxy-disagreement-on-real-geometry) for the caveats, which are substantial.
+3. **Method warning — the screen was missing terrain and water, and an aerial check is what found it.** Of the twenty largest grid-proxy disagreements, **11 are not developable land at all** — coastal barrier spit, wetland margin, or 14–24° peninsula slope. None is a grid problem. S-08 slope was documented as "not implemented" and there was no water or coastal rule at all; all three now exist, built from free inputs, and on that sample they **exclude 8 of the 11, flag 2 more, and miss 1**. On a **held-out** second sample of twenty they reach 3 of 5, miss 2 — both land-use failures that only real land-cover data can catch — and wrongly exclude 1 good site over a farm irrigation pond. Those samples were selected on disagreement, so neither failure rate is a population rate.
 4. **Method warning — a single width proxy changes the screening answer.** The 180 m inward-buffer test is the S-02 baseline; `2A/P` remains beside it as an audit comparator. The deterministic geometry stress case is a 200 × 200 m square: the core test passes while `2A/P` reports 100 m and fails. The run manifest reports the number of disagreements instead of hiding this modelling choice.
 
 ## Seasonal or intraday? The capture rate splits exactly
@@ -36,7 +38,7 @@ where `P_d` and `G_d` are day `d`'s mean price and mean output, `cov_d` is the w
 | 2024 | 82.5% | 82.3% | +0.2 | 114.2% |
 | 2025 | 92.2% | 93.9% | −1.7 | 102.2% |
 
-The intraday term is **positive in five of seven years** and averages **+2.5 points**: the modelled solar shape currently earns a small premium *within* the day, because daytime is worth more than the overnight trough and New Zealand has almost no solar on the system yet. Reading these annual numbers as cannibalisation would be wrong.
+The intraday term is **positive in five of seven years** and averages **+2.5 points** (2025 is a partial market year — 17,472 of a normal 17,520 periods — and is included in that mean; over the six complete years it is +3.2): the modelled solar shape currently earns a small premium *within* the day, because daytime is worth more than the overnight trough and New Zealand has almost no solar on the system yet. Reading these annual numbers as cannibalisation would be wrong.
 
 2019 stands out at **+10.1 points**, four times the period average, and it is worth saying why. The intraday term is the output-weighted within-day price premium divided by the annual mean price, and 2019 had a large numerator over a small denominator. It is the only year in the series whose average midday block was the most expensive part of the day — 126 NZD/MWh at 10:00–16:00 against 121 in the 17:00–21:00 evening and 94 overnight — which gives a solar-weighted premium of **+11.7 NZD/MWh**, the largest in absolute terms of the seven years. It was also the second-cheapest year overall at a 116 NZD/MWh annual mean.
 
@@ -128,9 +130,15 @@ An earlier version of this study split power lines by their OSM `power` tag, whi
 
 ![Grid proxy disagreement on OSM Canterbury geometry](outputs/osm/osm_grid_disagreement.png)
 
-The ordering is the finding, and it is monotonic in voltage. A road centreline is a decent stand-in for the low-voltage network — of course it is, the poles follow the road. It is almost useless for the 33–66 kV tier a project would actually connect to: a rank correlation of 0.11 means road proximity explains about **1%** of the variance in connection-tier proximity, and the two top-50 shortlists share no sites at all. The 33–66 kV tier is also not a stand-in for transmission (correlation 0.31 between those two), so there is no single "distance to the grid" number to put in a score.
+The ordering is the finding, and it is monotonic in voltage. A road centreline is a decent stand-in for the low-voltage network — of course it is, the poles follow the road. It is close to useless for the 33–66 kV tier a project would actually connect to, and the right way to say that is precise:
 
-**If you take one sentence to an interview:** on real Canterbury geometry, distance to a road predicts distance to 33–66 kV at ρ = 0.11 — statistically indistinguishable from picking sites at random — while predicting distance to 11 kV at ρ = 0.47.
+> Spearman ρ = **0.108**, 95% CI **[0.068, 0.148]**, p = 1.4 × 10⁻⁷, n = 2,356.
+
+That relationship is **statistically significant and practically negligible**. At this sample size a correlation this small is comfortably distinguishable from zero — it is not "no relationship" — but it explains **1.2% of the variance** in connection-tier proximity, and the two top-50 shortlists share no sites at all. The study publishes rho, the p-value, the confidence interval and the variance explained together, computed with `scipy.stats.spearmanr`, precisely so that neither half of that sentence can be quoted without the other.
+
+The 33–66 kV tier is also not a stand-in for transmission (ρ = 0.31 between those two), so there is no single "distance to the grid" number to put in a score.
+
+**If you take one sentence to an interview:** on real Canterbury geometry, distance to a road explains about 1% of the variance in distance to 33–66 kV (ρ = 0.11, real but negligible) against 22% for 11 kV (ρ = 0.47) — so a road proxy tells you where the low-voltage network is, not where you could connect.
 
 ### The verify flag had to be re-cut too
 
@@ -142,7 +150,7 @@ The absolute rank-shift trigger was dropped from the flag entirely. `rank_shift_
 
 All twenty of the largest connection-tier-versus-road disagreements were checked against LINZ Basemaps aerial imagery. Every verdict in [`data/aerial_review_log.csv`](data/aerial_review_log.csv) carries the date, the imagery and zoom used, **the image it was written from** (committed under [`data/aerial/`](data/aerial/)), and an `observed_detail` naming something visible in that image — an aircraft parked on a grass airstrip, a sand island in the lagoon, the distance to a surf line. A reader can open the picture and contradict the verdict; that is the point.
 
-> **Who reviewed these.** Three passes, recorded separately in the log. An AI agent (Claude Opus 5) made a first pass and an independent second pass over the committed images, and the repository author then reviewed all twenty and confirmed them on 13 September 2026 (`author_confirmed_on`). The verdicts are a human-confirmed screening judgement from aerial imagery, not a site visit or a signed technical assessment.
+> **Who reviewed these.** Three passes, recorded separately in the log. An AI agent (Claude Opus 5) made a first pass and **a second pass with the same tooling** — same agent, same images, so it is a re-read rather than an independent opinion — and the repository author then reviewed all twenty and confirmed them on 13 September 2026 (`author_confirmed_on`). The independent checks are the author's confirmation and the measured geometry: distances in the log are computed from the polygons, not estimated off a picture. The verdicts are a human-confirmed screening judgement from aerial imagery, not a site visit or a signed technical assessment.
 >
 > The second pass earned its keep. It confirmed all twenty verdicts but found two errors of my own making: the first pass had recorded the mosaic as "about 1.7 km across" when 1.7 km is the *per-tile* width at this latitude and the 3 × 3 mosaic is **5.3 km**, so every distance eyeballed off an image was roughly three times too small. Those are now measured from the geometry instead of estimated by eye. It also corrected one description — a site called an "enclosed valley floor" whose polygon turns out, at 23.8° mean slope, to be mostly the steep valley sides.
 
@@ -175,19 +183,29 @@ Median mean slope across the study population is 0.77° — it is the Canterbury
 
 GLO-30 is a **surface** model, not a terrain model: it includes shelterbelts, buildings and trees, which inflate slope locally on otherwise flat paddocks. S-08 therefore uses the mean over the polygon rather than the maximum, where a single row of poplars would dominate, and the rule is a terrain screen rather than a civil design input. A real design stage wants a bare-earth DEM.
 
-Scored against the twenty labelled sites, keeping exclusion and flagging apart — the same distinction S-05 rests on, since a flagged site still reaches a human as a candidate:
+Scored against the labelled sites, keeping exclusion and flagging apart — the same distinction S-05 rests on, since a flagged site still reaches a human as a candidate. **Two samples**, both drawn by the same criterion: **A** is the twenty largest connection-tier-versus-road disagreements, and its labels were in view when the thresholds were chosen. **B** is the next twenty, labelled from imagery *after* the thresholds were frozen. A can only ever be in-sample; B is the held-out check.
 
-| Outcome for the 11 non-developable sites | Count |
-|---|---:|
-| **Excluded** by S-08 slope | 4 |
-| **Excluded** by S-09 mapped water | 4 |
-| **Excluded**, total | **8** |
-| Flagged only by S-10 coastal — still in the candidate set | 2 |
-| Neither excluded nor flagged | 1 |
+| | A (in-sample) | B (held out) |
+|---|---:|---:|
+| Reviewed | 20 | 20 |
+| Not developable | 11 (55%) | **5 (25%)** |
+| **Excluded** by S-08 slope | 4 | 0 |
+| **Excluded** by S-09 mapped water | 4 | 1 |
+| **Excluded**, total | **8** | **1** |
+| Flagged only by S-10 coastal | 2 | 2 |
+| Neither excluded nor flagged | 1 | **2** |
+| Developable sites wrongly excluded | 0 | **1** |
+| Developable sites flagged only | 0 | 4 |
 
-No developable site is excluded, and none is flagged either.
+**The held-out result is weaker than the in-sample one, and the reasons are specific rather than embarrassing.**
 
-> **This is in-sample.** The thresholds were chosen with those twenty labels in view. The number says the rules express what the imagery showed; it is not an accuracy claim on unseen sites, and it should not be quoted as one.
+First, B is a milder sample by construction: its median rank shift is 2,088 against A's 2,192, and only a quarter of it is bad land rather than half. Selecting on disagreement puts the most extreme cases in A, so a lower failure rate in B is what should happen. Anyone quoting 55% as the screen's false-positive rate is quoting the worst twenty sites in the region.
+
+Second, three of B's five failures are the same landforms the rules were built for — barrier spit, lagoon wetland, estuary margin — and the rules reach all three: one excluded on mapped water, two flagged for coastal review. **The other two are a failure mode that did not appear in A at all**: a rural settlement of lifestyle blocks with dwellings on every title, and a remnant paddock on a town's edge boxed in by a motorway interchange and a rail corridor. Both are tagged farmland in OpenStreetMap and both are flat, dry and inland, so no terrain or water rule can see them. They are land-use failures, and **LCDB would classify both as built-up** — which is the most concrete argument in this repository for finishing the LRIS run.
+
+Third, B produced the rules' first false exclusion: an irrigated cropping block that S-09 threw out because a farm **irrigation pond** touches the polygon. `natural=water` does not distinguish a storage pond from a wetland, and "any intersection" is too blunt a test. The rule is left as it is and the failure is reported, because tuning it on the sample that exposed it is how the in-sample problem started.
+
+> **Sample A is in-sample.** Its thresholds were chosen with those labels in view, so its 8-of-11 says the rules express what the imagery showed, not that they generalise. Sample B is the generalisation test, and it is reported above at full strength: 3 of 5 reached, 2 missed, 1 good site wrongly excluded.
 
 The two flagged-only sites are the honest middle: both are on the barrier spit, the coastal flag fires on them, and a reviewer opening the flag would see what the imagery shows. They are not failures of the screen, but they are not exclusions either, and rounding them up to "caught" would be the kind of quiet overstatement this project exists to avoid.
 
@@ -219,8 +237,16 @@ solar-screen --sites data/derived/real/sites.gpkg \
   --roads data/derived/real/roads.gpkg --output outputs/real
 ```
 
-`build_real_sites.py` pulls each layer over WFS, clips it to the study bounding
-box, projects to EPSG:2193, and assembles the four attributes the screen
+It runs a **preflight** first: one cheap `DescribeFeatureType` per layer, so a
+bad key or a wrong layer id surfaces in seconds instead of twenty minutes into
+paging. Set the keys as environment variables — the script refuses an unset key,
+the documentation's own placeholder text, and anything too short to be a real
+key, each with the page to copy the key from. Portal errors come back as one
+line naming the status and what to check; the request URL carries the key, so it
+never appears in a message.
+
+`build_real_sites.py` then pulls each layer over WFS, clips it to the study
+bounding box, projects to EPSG:2193, and assembles the four attributes the screen
 requires: LCDB polygons of the configured usable classes become the candidate
 sites, and LUC class and solar resource are attached by a point-in-polygon
 lookup at each polygon's representative point.
@@ -228,12 +254,24 @@ lookup at each polygon's representative point.
 Three things about it are worth knowing before the first run:
 
 - **Layer ids live in `config/assumptions.yml`**, because publishers reissue
-  datasets and the ids move. The script prints the title the service returns for
-  each id *before* downloading, so the wrong layer shows up in the first lines of
-  output rather than in the results. Two ids are taken from
-  [rules/SOURCES.md](rules/SOURCES.md) (LCDB v5.0 `104400`, LENZ solar `48095`);
-  the rest are marked `verify` in the config and should be checked against the
-  portal page once.
+  datasets and the ids move. All six have now been checked against the live
+  services, and three of the six first guesses were wrong: NZLRI LUC is `48076`
+  and not `48079`, LINZ Protected Areas is `53564` and not `754` (which
+  describes itself happily and then returns nothing), and LCDB v5.0 `104400` is
+  now marked deprecated on the portal in favour of v6.0 `123148`. The preflight
+  is what found all three.
+- **The solar layer cannot come over the web services at all.** LENZ mean annual
+  solar radiation is a raster; LRIS serves it as WMTS image tiles and offers no
+  WCS, and a rendered tile's pixels are palette colours rather than kWh/m². It
+  has to be exported once from [its layer page](https://lris.scinfo.org.nz/layer/48095)
+  as a GeoTIFF into `data/raw/lris/`, after which the script samples it per
+  polygon — the same pattern the Copernicus DEM already uses. The preflight says
+  so by name when the file is absent.
+- **The LUC class field is a trap.** NZLRI publishes `lcorrclass` (an integer)
+  and `domluc` (a string), but also `lcorr`, which holds the full correlation
+  code such as `3s 5`. Reading `lcorr` parses to NaN and would blank every LUC
+  class while looking like a successful join, so the accepted field list puts
+  the two real ones first and excludes `lcorr` explicitly.
 - **Site identifiers are derived from the geometry**, not from the order the
   service happened to page features back, so a re-download does not renumber
   every site.
@@ -241,12 +279,58 @@ Three things about it are worth knowing before the first run:
   to `sites_unattributed.gpkg` with a count on stdout, because a silent drop
   would hide a failed join.
 
-**This path is tested against fixtures, not against the live services.**
+**Status of the live run.** It has been run end to end. 27,452 LCDB polygons in
+the study bbox became **1,166 candidate sites** with all four attributes (9 more
+had no LUC or solar value and went to `sites_unattributed`), and the screen
+returned **404 candidates and 762 quarantined**. Sampled LENZ values land at
+1,325–1,441 kWh/m²/yr, which is the range the demo fixtures were written to.
+**S-05 now has real land behind it: 197 of the 404 candidates are LUC 1–3**, so
+the NPS-HPL flag is finally pointing at actual Canterbury paddocks rather than
+at twelve rectangles.
+
+The first version of that run returned 632 candidates, because S-08, S-09 and
+S-10 existed only in the study script and `solar-screen` never applied them.
+With all ten rules in the library, slope removes a further **319** sites and
+mapped water **233**. That is the size of the hole: a third of what the screen
+was calling candidates was steep or wet.
+
+The assembled layers and the screening outputs are **not committed**. LCDB and
+NZLRI come from the LRIS portal under its item terms, which this project does
+not redistribute; `data/derived/real/` and `outputs/real/` are gitignored, and
+the run is reproducible from the two API keys.
+
+Three things the real run exposed that the demo could not:
+
+- **An LCDB polygon is not a parcel.** Land cover merges across ownership, so
+  the largest polygon the assembly produced was 230,000 ha and the largest
+  surviving candidate is 2,524 ha. The area and width rules pass those
+  trivially. A real shortlist needs LCDB intersected with cadastral parcels
+  (LINZ NZ Primary Parcels), which is the obvious next step and is not done.
+- **LINZ Topo50 powerlines carry no voltage attribute** — the layer has
+  `t50_fid` and `support_ty` and nothing else. So the voltage tiering has
+  nothing to tier on and falls back to the whole layer, which `grid_basis`
+  records as `all_mapped_powerlines`. The ρ = 0.11 connection-tier finding is
+  reproducible on OpenStreetMap, which tags voltage, and **not** on LINZ, which
+  does not. That is worth knowing before quoting it as a LINZ result.
+- **S-08, S-09 and S-10 now run in `solar-screen`.** They used to live only in
+  the OSM study entry point, so the first real run applied S-01 to S-07 and kept
+  137 candidates above the 10° slope threshold. They are in `evaluate_sites`,
+  and the run above is the result.
+
+  Slope stays a **precomputed column**, not a raster read: `evaluate_sites`
+  takes `mean_slope_deg` from the table `scripts/compute_site_terrain.py`
+  writes, so the library never imports a raster reader and CI never downloads a
+  DEM. Water and coastline are vector and go in directly. Omitting any of the
+  three leaves its rule unapplied and **says so** — `rules_not_applied` in the
+  manifest and the audit, and a site with no slope value raises
+  `S08_verify_slope` rather than passing S-08 by default. A rule that is not
+  applied should never read as a rule that was satisfied.
+
 `tests/test_real_sites.py` exercises the assembly on layers shaped like the real
 ones — publisher column spellings, multipart polygons, sites outside every
-source polygon — but no test has touched LRIS or LINZ. Treat the first live run
-as a verification run: check the printed layer titles, the feature counts and
-the unattributed count before trusting any output.
+source polygon, placeholder API keys — but the tests themselves never touch the
+portals. Treat the first complete run as a verification run: check the feature
+counts and the unattributed count before trusting any output.
 
 Once it has run, S-05 finally has real parcels behind it. The NPS-HPL flag is
 the rule that most needs them: it is a **flag** precisely because LUC class
@@ -344,7 +428,7 @@ Both are executed top to bottom by `tests/test_notebooks.py`, so they cannot qui
 - `outputs/demo/run_manifest.json` and `findings.json` — machine-readable provenance and dashboard payload
 - `outputs/osm/osm_grid_distance.csv` and `osm_grid_study.json` — the real-geometry grid-proxy comparison over 2,356 OSM farmland polygons
 - `outputs/osm/aerial_review_queue.csv` — the twenty largest disagreements with coordinates, a LINZ Basemaps link, the terrain and water columns, and the completed aerial verdicts
-- `data/aerial/` — the imagery each verdict was written from, one file per reviewed site
+- `data/aerial/` — the imagery each verdict was written from, one file per reviewed site across both samples
 - `data/derived/osm/site_terrain.csv` — per-site mean and p90 slope from Copernicus GLO-30
 - `outputs/osm/osm_grid_disagreement.png` — proxy scatter and the top-N agreement sweep
 
@@ -358,7 +442,7 @@ The market series are different: both the ISL0661 half-hourly final prices and t
 
 ## Validation
 
-One hundred and seven automated tests cover shared configuration and both CLIs, CRS/schema/geometry gates, exclusion and flag rules, both width methods, candidate-only ranking, spatial-indexed nearest distance, configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, strict market-value input validity, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry, seasonal/intraday decomposition, the metered load control, sensitivities, OSM voltage tiers, terrain and water rules, aerial-review evidence, the real-data assembly path against fixtures — publisher column spellings, multipart splitting, geometry-derived identifiers, the refusal to run without an API key — and top-to-bottom notebook execution.
+One hundred and forty-three automated tests cover shared configuration and both CLIs, CRS/schema/geometry gates, exclusion and flag rules, both width methods, candidate-only ranking, spatial-indexed nearest distance, configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, strict market-value input validity, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry, seasonal/intraday decomposition, the metered load control, sensitivities, OSM voltage tiers, terrain and water rules, aerial-review evidence, the real-data assembly path against fixtures — publisher column spellings, multipart splitting, geometry-derived identifiers, the refusal to run without an API key, on a placeholder key or on an implausibly short one, and portal errors that name the status without echoing the key, that every third-party import is declared in `pyproject.toml` including the two that are imported lazily inside functions, that `environment.yml` matches — the rule register as a contract against the library that implements it — every registered rule now has to have a column in evaluate_sites, which is what caught S-08 to S-10 living only in a script — the single S-06 implementation and its refusal to flag on rank shift, the held-out sample B scorecard, and top-to-bottom notebook execution.
 
 GitHub Actions installs the committed lock, reruns both complete pipelines and compares the full tracked output-file manifest. It strictly diffs CSV/JSON; because GeoPackage and PNG bytes vary across operating systems, `scripts/verify_reproduced_outputs.py` compares GeoPackages by fields and geometry and applies a bounded pixel-difference check to every generated figure. Binary outputs are therefore covered without requiring byte-identical cross-platform files.
 

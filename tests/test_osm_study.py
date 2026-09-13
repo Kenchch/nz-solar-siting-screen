@@ -17,14 +17,15 @@ from nz_solar_siting.osm_layers import (
     read_osm_layers,
     split_by_voltage,
 )
+from nz_solar_siting.siting import SitingConfig
 
 ROOT = Path(__file__).resolve().parents[1]
 OSM_DIR = ROOT / "data" / "derived" / "osm"
 STUDY = ROOT / "outputs" / "osm" / "osm_grid_study.json"
-STUDY_CONFIG = yaml.safe_load(
-    (ROOT / "config" / "assumptions.yml").read_text(encoding="utf-8")
-)["osm_study"]
-CONNECTION = STUDY_CONFIG["connection_tier"]
+ASSUMPTIONS = yaml.safe_load((ROOT / "config" / "assumptions.yml").read_text(encoding="utf-8"))
+SITING = ASSUMPTIONS["siting"]
+TIERS = SITING["voltage_tiers"]
+CONNECTION = SITING["connection_tier"]
 
 
 @pytest.fixture(scope="module")
@@ -76,7 +77,7 @@ def test_untagged_voltage_is_not_guessed():
 def test_tiers_partition_every_line_exactly_once():
     powerlines = read_osm_layer("powerlines", OSM_DIR)
     _, counts = split_by_voltage(
-        powerlines, STUDY_CONFIG["voltage_tiers"], float(STUDY_CONFIG["excluded_voltage_v"])
+        powerlines, SitingConfig().voltage_tiers, float(SITING["excluded_voltage_v"])
     )
     assert sum(counts.values()) == len(powerlines)
     assert counts["excluded_above_threshold"] > 0, "the HVDC ways must be excluded, not tiered"
@@ -90,7 +91,7 @@ def test_a_66kv_way_is_tiered_by_voltage_not_by_its_power_tag():
         {"power": ["line", "minor_line"], "voltage": ["66000", "66000"]},
         geometry=geometry, crs="EPSG:2193",
     )
-    split, _ = split_by_voltage(lines, STUDY_CONFIG["voltage_tiers"], 350000)
+    split, _ = split_by_voltage(lines, SitingConfig().voltage_tiers, 350000)
     assert len(split[CONNECTION]) == 2
     assert len(split["transmission_110kv_plus"]) == 0
 
@@ -103,8 +104,10 @@ def test_study_sample_is_large_enough_to_mean_something(summary):
 
 def test_road_distance_predicts_distribution_but_not_the_connection_tier(summary):
     """The published claim, stated as an ordering rather than one number."""
-    correlation = summary["rank_correlation"]
-    transmission = correlation[f"transmission_110kv_plus_m|road_m"]
+    correlation = {
+        pair: value["spearman_rho"] for pair, value in summary["rank_correlation"].items()
+    }
+    transmission = correlation["transmission_110kv_plus_m|road_m"]
     connection = correlation[f"{CONNECTION}_m|road_m"]
     distribution = correlation["distribution_22kv_m|road_m"]
     assert transmission < connection < distribution
@@ -130,7 +133,7 @@ def test_the_verify_flag_discriminates(summary):
 
 def test_every_queued_aerial_site_has_coordinates_and_a_link():
     queue = pd.read_csv(ROOT / "outputs" / "osm" / "aerial_review_queue.csv")
-    assert len(queue) == 20
+    assert len(queue) == 40
     assert queue["latitude"].between(-45, -42).all()
     assert queue["longitude"].between(170, 175).all()
     assert queue["basemaps_url"].str.startswith("https://basemaps.linz.govt.nz/").all()
@@ -138,14 +141,21 @@ def test_every_queued_aerial_site_has_coordinates_and_a_link():
 
 def test_the_aerial_sample_is_complete_and_carries_its_provenance(summary):
     queue = pd.read_csv(ROOT / "outputs" / "osm" / "aerial_review_queue.csv")
-    assert summary["aerial_review"]["reviewed"] == len(queue) == 20
+    assert summary["aerial_review"]["reviewed"] == len(queue) == 40
     assert queue["finding"].notna().all()
     assert queue["reviewed_on"].notna().all()
     assert queue["imagery"].notna().all()
     assert set(queue["developable"]) <= {"yes", "no"}
-    assert summary["aerial_review"]["false_positive_rate"] == pytest.approx(
-        summary["aerial_review"]["not_developable"] / 20
-    )
+    for card in summary["aerial_review"]["by_sample"].values():
+        assert card["false_positive_rate"] == pytest.approx(card["not_developable"] / 20)
+
+
+def test_no_pooled_failure_rate_is_published(summary):
+    """One sample is in-sample and one is held out; a pooled rate means neither."""
+    review = summary["aerial_review"]
+    assert "false_positive_rate" not in review
+    assert "not_developable" not in review
+    assert "in_sample_rule_check" not in review
 
 
 def test_layers_load_together_in_the_documented_order():
@@ -187,12 +197,12 @@ def test_terrain_and_water_rules_exclude_a_minority(summary):
 
 
 def test_the_new_rules_catch_the_labelled_failures(summary):
-    """In-sample by construction: the thresholds were set with these labels in view.
+    """In-sample by construction: the thresholds were set with sample A in view.
 
-    The test records what the rules do on the labelled twenty so a later change
-    cannot silently undo it, not that the rules generalise.
+    The test records what the rules do on A so a later change cannot silently
+    undo it, not that the rules generalise. Generalisation is sample B's job.
     """
-    check = summary["aerial_review"]["in_sample_rule_check"]
+    check = summary["aerial_review"]["by_sample"]["A"]
     assert check["excluded_total"] >= 8
     assert check["developable_sites_wrongly_excluded"] == 0
     assert len(check["neither_excluded_nor_flagged"]) <= 1
@@ -204,8 +214,8 @@ def test_exclusion_and_flagging_are_reported_separately(summary):
     S-10 leaves a site in the candidate set for a human to assess, so a site it
     only flags has not been caught in the sense S-08 and S-09 catch one.
     """
-    check = summary["aerial_review"]["in_sample_rule_check"]
-    not_developable = summary["aerial_review"]["not_developable"]
+    check = summary["aerial_review"]["by_sample"]["A"]
+    not_developable = check["not_developable"]
     assert "excluded_total" in check and "flagged_only_by_coast" in check
     assert "caught_by_any" not in check
     accounted = (
@@ -221,33 +231,79 @@ def test_the_review_passes_are_recorded_separately(summary):
     """Three passes, distinguishable: two AI passes and the author's confirmation."""
     review = summary["aerial_review"]
     second = review["second_pass"]
-    assert second["confirmed"] + second["corrected"] == review["reviewed"]
+    assert second["confirmed"] + second["corrected"] == 20, "sample A had two passes"
     assert second["corrected"] >= 1, "the second pass found and fixed a real error"
-    assert second["author_confirmed"] == review["reviewed"]
+    assert second["not_required"] == 20, "sample B was labelled once, after freezing"
+    assert second["author_confirmed"] == 20
 
 
 def test_the_aerial_sample_selection_is_declared(summary):
     """The 55% is the road proxy's worst cases, not a population rate."""
     selection = summary["aerial_review"]["selection"]
     assert "disagreement" in selection
-    assert "not the candidate population" in selection
+    assert "describes the candidate population" in selection
 
 
 def test_every_logged_verdict_cites_an_image_that_exists():
     log = pd.read_csv(ROOT / "data" / "aerial_review_log.csv")
-    assert len(log) == 20
+    assert len(log) == 40
     assert log["zoom_level"].eq(14).all()
     for image in log["evidence_image"]:
         assert (ROOT / image).exists(), image
     assert log["observed_detail"].str.len().min() > 80
     # The reviewer field must say who actually made the call.
     assert log["reviewer"].str.contains("AI agent").all()
-    assert log["second_pass_result"].isin({"confirmed", "corrected"}).all()
+    assert log["second_pass_result"].isin({"confirmed", "corrected", "not_required"}).all()
     # The author's confirmation is its own column, never folded into `reviewer`.
-    assert log["author_confirmed_on"].notna().all()
+    assert log.loc[log["sample"] == "A", "author_confirmed_on"].notna().all()
     assert not log["reviewer"].str.contains("author", case=False).any()
 
 
 def test_the_scope_field_lists_the_rules_actually_applied(summary):
     for rule in ("S-01", "S-02", "S-08", "S-09", "S-10"):
         assert rule in summary["scope"], rule
+
+
+def test_the_two_labelled_samples_are_reported_separately(summary):
+    """A is in-sample by construction; B is the held-out check. Never pooled."""
+    by_sample = summary["aerial_review"]["by_sample"]
+    assert set(by_sample) == {"A", "B"}
+    assert "in-sample" in by_sample["A"]["basis"]
+    assert "held out" in by_sample["B"]["basis"]
+    for name, card in by_sample.items():
+        assert card["reviewed"] == 20, name
+        accounted = (
+            card["excluded_total"]
+            + card["flagged_only_by_coast"]
+            + len(card["neither_excluded_nor_flagged"])
+        )
+        assert accounted == card["not_developable"], name
+
+
+def test_sample_b_is_the_milder_sample_and_says_so(summary):
+    """Selecting on disagreement puts the extremes in A, so B must be milder.
+
+    If this ever inverts, the two samples are no longer drawn by one criterion
+    and the held-out comparison means something different.
+    """
+    by_sample = summary["aerial_review"]["by_sample"]
+    assert by_sample["B"]["median_rank_shift"] < by_sample["A"]["median_rank_shift"]
+    assert by_sample["B"]["false_positive_rate"] < by_sample["A"]["false_positive_rate"]
+
+
+def test_the_held_out_failures_are_recorded_not_smoothed(summary):
+    """B exposed a miss and a false exclusion; both must stay visible."""
+    card = summary["aerial_review"]["by_sample"]["B"]
+    assert len(card["neither_excluded_nor_flagged"]) >= 2
+    assert card["developable_sites_wrongly_excluded"] >= 1
+    assert card["wrongly_excluded"], "a false exclusion must name the site"
+
+
+def test_every_labelled_site_has_its_sample_and_its_image():
+    log = pd.read_csv(ROOT / "data" / "aerial_review_log.csv")
+    assert len(log) == 40
+    assert set(log["sample"]) == {"A", "B"}
+    assert log.groupby("sample").size().tolist() == [20, 20]
+    assert log["developable"].isin({"yes", "no"}).all()
+    for image in log["evidence_image"]:
+        assert (ROOT / image).exists(), image

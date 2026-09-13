@@ -34,7 +34,7 @@ import json
 import os
 from pathlib import Path
 import sys
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -42,6 +42,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 
 from nz_solar_siting.config import load_project_config
@@ -51,23 +52,65 @@ PAGE_SIZE = 5000
 
 
 class MissingCredential(RuntimeError):
-    """Raised when a portal API key is not present in the environment."""
+    """Raised when a portal API key is absent, or is obviously not a key."""
+
+
+class ServiceError(RuntimeError):
+    """Raised when a portal rejects or fails a request, with what to check."""
+
+
+KEY_PAGES = {
+    "LRIS_API_KEY": "https://lris.scinfo.org.nz/my/api/",
+    "LINZ_API_KEY": "https://data.linz.govt.nz/my/api/",
+}
+# The documentation's own example strings. Pasting the example verbatim is the
+# most likely way to end up with a set-but-useless variable, and a 400 from the
+# service is a poor way to find that out.
+PLACEHOLDERS = {"your-lris-key", "your-linz-key", "your-key", "...", "changeme"}
 
 
 def api_key(variable: str) -> str:
     value = os.environ.get(variable, "").strip()
+    page = KEY_PAGES.get(variable, "the portal's API key page")
     if not value:
         raise MissingCredential(
-            f"{variable} is not set. Register a free account, create an API key and export it. "
-            "LRIS: https://lris.scinfo.org.nz  LINZ: https://data.linz.govt.nz"
+            f"{variable} is not set. Register a free account, create an API key at {page} "
+            f"and export it."
+        )
+    if value.lower() in PLACEHOLDERS:
+        raise MissingCredential(
+            f"{variable} is set to the example placeholder {value!r}, not a real key. "
+            f"Copy the key from {page}."
+        )
+    if len(value) < 20:
+        raise MissingCredential(
+            f"{variable} is {len(value)} characters, which is shorter than any key these "
+            f"portals issue. Copy the key from {page}."
         )
     return value
 
 
-def _request(url: str, timeout: int) -> bytes:
+def _request(url: str, timeout: int, layer: str = "") -> bytes:
     request = Request(url, headers={"User-Agent": "nz-solar-siting-screen real-data assembly"})
-    with urlopen(request, timeout=timeout) as response:
-        return response.read()
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            return response.read()
+    except HTTPError as error:
+        # The URL carries the key, so it must never appear in a message.
+        hint = {
+            400: "the service rejected the request; the usual cause is a malformed API key, "
+                 "then a layer id that is not a WFS feature type",
+            401: "the API key was not accepted",
+            403: "the API key is not authorised for this layer; accept the licence on the "
+                 "layer's portal page, then retry",
+            404: "no such layer id on this portal",
+            429: "rate limited; wait and retry",
+        }.get(error.code, "unexpected response")
+        raise ServiceError(
+            f"{layer or 'request'} failed: HTTP {error.code} {error.reason} - {hint}"
+        ) from None
+    except URLError as error:
+        raise ServiceError(f"{layer or 'request'} failed: {error.reason}") from None
 
 
 def describe_layer(service: str, key: str, layer_id: int, timeout: int) -> str:
@@ -77,8 +120,8 @@ def describe_layer(service: str, key: str, layer_id: int, timeout: int) -> str:
         "typeNames": f"layer-{layer_id}", "outputFormat": "application/json",
     })
     try:
-        payload = json.loads(_request(f"{service};key={key}/wfs?{query}", timeout))
-    except (HTTPError, ValueError):
+        payload = json.loads(_request(f"{service};key={key}/wfs?{query}", timeout, f"layer-{layer_id}"))
+    except (ServiceError, ValueError):
         return "unknown (DescribeFeatureType unavailable)"
     types = payload.get("featureTypes") or []
     return str(types[0].get("typeName", "unknown")) if types else "unknown"
@@ -98,7 +141,9 @@ def fetch_layer(
             "bbox": ",".join(f"{value:.1f}" for value in bbox) + ",EPSG:2193",
             "count": PAGE_SIZE, "startIndex": start,
         })
-        payload = json.loads(_request(f"{service};key={key}/wfs?{query}", timeout))
+        payload = json.loads(
+            _request(f"{service};key={key}/wfs?{query}", timeout, f"layer-{layer_id}")
+        )
         features = payload.get("features") or []
         if not features:
             break
@@ -111,6 +156,54 @@ def fetch_layer(
         return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs="EPSG:2193")
     combined = pd.concat(frames, ignore_index=True)
     return gpd.GeoDataFrame(combined, geometry="geometry", crs="EPSG:2193")
+
+
+class MissingRasterExport(RuntimeError):
+    """Raised when a raster-only layer has not been exported yet."""
+
+
+def sample_raster(sites: gpd.GeoDataFrame, path: Path, spec: dict, label: str) -> pd.Series:
+    """Mean raster value inside each polygon, in annual kWh/m2.
+
+    Some LRIS layers are grids, and a grid has no WFS feature type: the portal
+    serves rendered WMTS tiles, whose pixels are palette colours rather than
+    measurements. Reading a value therefore needs the raster itself, exported
+    once from the layer page.
+
+    Windows are read from disk one polygon at a time. The national LENZ grid is
+    23,180 x 24,362 cells, so reading the whole band would cost about a gigabyte
+    of memory to answer questions about a few thousand small polygons.
+    """
+    import rasterio
+    from rasterio.features import geometry_mask
+    from rasterio.windows import Window, from_bounds
+
+    scale = float(spec.get("raster_scale", 1.0))
+    per_year = float(spec.get("days_per_year", 1.0)) / float(spec.get("megajoules_per_kwh", 1.0))
+    with rasterio.open(path) as dataset:
+        if dataset.crs is None:
+            raise MissingRasterExport(f"{label}: {path} has no CRS")
+        frame = sites.to_crs(dataset.crs)
+        values = []
+        for geometry in frame.geometry:
+            window = from_bounds(*geometry.bounds, transform=dataset.transform)
+            row = max(0, int(window.row_off))
+            col = max(0, int(window.col_off))
+            height = min(dataset.height - row, int(window.height) + 1)
+            width = min(dataset.width - col, int(window.width) + 1)
+            if height <= 0 or width <= 0:
+                values.append(float("nan"))
+                continue
+            read_window = Window(col, row, width, height)
+            patch = dataset.read(1, window=read_window, masked=True)
+            mask = ~geometry_mask(
+                [geometry], out_shape=patch.shape,
+                transform=dataset.window_transform(read_window),
+                invert=False, all_touched=True,
+            )
+            selected = patch[mask & ~patch.mask]
+            values.append(float(selected.mean()) if selected.size else float("nan"))
+    return pd.Series(values, index=sites.index, dtype=float) * scale * per_year
 
 
 def first_present(frame: gpd.GeoDataFrame, candidates: tuple[str, ...], label: str) -> str:
@@ -165,13 +258,16 @@ def build_sites(
     sites = sites.loc[sites.geometry.area >= minimum_area_ha * 10_000.0].reset_index(drop=True)
 
     luc_column = first_present(luc, tuple(config["luc_class_fields"]), "luc")
-    solar_column = first_present(solar, tuple(config["solar_value_fields"]), "solar")
     sites["luc_class"] = pd.to_numeric(
         attach_by_point(sites, luc, luc_column, "luc_class"), errors="coerce"
     )
-    sites["solar_kwh_m2"] = pd.to_numeric(
-        attach_by_point(sites, solar, solar_column, "solar_kwh_m2"), errors="coerce"
-    )
+    if isinstance(solar, gpd.GeoDataFrame):
+        solar_column = first_present(solar, tuple(config["solar_value_fields"]), "solar")
+        sites["solar_kwh_m2"] = pd.to_numeric(
+            attach_by_point(sites, solar, solar_column, "solar_kwh_m2"), errors="coerce"
+        )
+    else:
+        sites["solar_kwh_m2"] = sample_raster(sites, solar, config["layers"]["solar"], "solar")
     # A site with no LUC or no solar value cannot be screened by S-05 or S-07.
     # Dropping it silently would hide a join failure, so report and quarantine.
     incomplete = sites["luc_class"].isna() | sites["solar_kwh_m2"].isna()
@@ -201,6 +297,48 @@ def write_layer(frame: gpd.GeoDataFrame, path: Path, layer: str) -> int:
     return int(len(frame))
 
 
+def preflight(services: dict[str, tuple[str, str]], layers: dict, timeout: int) -> None:
+    """Check every layer id answers before downloading any of them.
+
+    A run that dies on the sixth layer after twenty minutes of paging has wasted
+    the twenty minutes. One cheap request each says up front whether the keys
+    work and whether every id is a real feature type.
+    """
+    print("preflight:", flush=True)
+    problems: list[str] = []
+    for name, spec in layers.items():
+        if spec.get("source") == "raster_export":
+            path = ROOT / spec["raster_path"]
+            # Create the directory rather than naming one that does not exist:
+            # "save it here" is not useful advice if "here" is missing.
+            path.parent.mkdir(parents=True, exist_ok=True)
+            state = "present" if path.exists() else "NOT EXPORTED"
+            print(f" {' ' if path.exists() else '?'} {name:<12} raster           {state}: "
+                  f"{spec['raster_path']}", flush=True)
+            if not path.exists():
+                problems.append(
+                    f"{name} is a grid layer, and LRIS offers no WCS for it, so its values "
+                    f"cannot be read over the web services."
+                    f"\n    Export it once from {spec['export_page']} as GeoTIFF in EPSG:2193,"
+                    f"\n    and save it as exactly this file (the folder now exists):"
+                    f"\n      {path}"
+                )
+            continue
+        service, key = services[spec["portal"]]
+        layer_id = int(spec["layer_id"])
+        title = describe_layer(service, key, layer_id, timeout)
+        marker = "?" if title.startswith("unknown") else " "
+        print(f" {marker} {name:<12} layer-{layer_id:<7} {title}", flush=True)
+        if title.startswith("unknown"):
+            problems.append(f"{name} (layer-{layer_id}, {spec['portal']})")
+    if problems:
+        raise ServiceError(
+            "preflight failed:\n  - " + "\n  - ".join(problems)
+            + "\nCheck each layer id against its portal page, and accept the licence there "
+            "if you have not already."
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="config/assumptions.yml")
@@ -221,12 +359,15 @@ def main() -> None:
         "linz": (settings["linz_service"], api_key("LINZ_API_KEY")),
     }
 
+    preflight(services, layers, arguments.timeout)
+
     downloaded: dict[str, gpd.GeoDataFrame] = {}
     for name, spec in layers.items():
+        if spec.get("source") == "raster_export":
+            continue
         service, key = services[spec["portal"]]
         layer_id = int(spec["layer_id"])
-        title = describe_layer(service, key, layer_id, arguments.timeout)
-        print(f"  {name}: layer-{layer_id} -> {title}", flush=True)
+        print(f"  {name}: downloading layer-{layer_id}", flush=True)
         frame = fetch_layer(service, key, layer_id, bbox, arguments.timeout)
         if frame.empty:
             raise RuntimeError(
@@ -237,8 +378,14 @@ def main() -> None:
         downloaded[name] = frame
         print(f"  {name}: {len(frame)} features", flush=True)
 
+    solar_spec = layers["solar"]
+    solar_source = (
+        ROOT / solar_spec["raster_path"]
+        if solar_spec.get("source") == "raster_export"
+        else downloaded["solar"]
+    )
     sites = build_sites(
-        downloaded["landcover"], downloaded["luc"], downloaded["solar"],
+        downloaded["landcover"], downloaded["luc"], solar_source,
         usable, project.siting.minimum_area_ha, settings,
     )
     complete = sites.dropna(subset=["luc_class", "solar_kwh_m2"]).reset_index(drop=True)
@@ -270,4 +417,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (MissingCredential, ServiceError) as error:
+        # These are the user's problems to fix, not stack traces to read.
+        print(f"\n{error}", file=sys.stderr)
+        raise SystemExit(2) from None

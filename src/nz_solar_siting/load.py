@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import gzip
+from io import BytesIO
 from pathlib import Path
 from typing import Iterable
 
@@ -33,7 +35,16 @@ def read_layer(
     name: str = "layer",
     layer: str | None = None,
 ) -> gpd.GeoDataFrame:
-    frame = gpd.read_file(path, layer=layer)
+    """Read a vector layer, transparently handling the gzipped GeoJSON this
+    project already commits. Without this a caller has to know which of its own
+    layers are compressed, which is a detail the format should carry.
+    """
+    source = Path(path)
+    if source.suffix == ".gz":
+        with gzip.open(source, "rb") as handle:
+            frame = gpd.read_file(BytesIO(handle.read()), layer=layer)
+    else:
+        frame = gpd.read_file(source, layer=layer)
     assert_nztm(frame, name)
     missing = sorted(set(required_columns) - set(frame.columns))
     if missing:
