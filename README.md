@@ -152,7 +152,7 @@ way:
 The **ordering survives** — road proximity is most informative about the
 lowest-voltage network and least informative about the highest, on both
 populations. The **magnitude does not**: on real cadastral units a road proxy
-explains about **14%** of the variance in connection-tier distance, not 1%.
+explains about **14%** of the rank variance in connection-tier distance, not 1%.
 
 So the sentence "explains about 1% of the variance" was true of the population I
 measured and not of the one a developer would actually screen. The OSM farmland
