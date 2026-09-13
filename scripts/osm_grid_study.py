@@ -95,10 +95,11 @@ def rule_scorecard(sample: pd.DataFrame, name: str, shift_column: str) -> dict[s
 def rank_correlation(left: pd.Series, right: pd.Series) -> dict[str, object]:
     """Spearman correlation with its p-value and a Fisher confidence interval.
 
-    A correlation this small invites two opposite misreadings. It is not "no
-    relationship": at this sample size rho = 0.11 is comfortably significant.
-    Nor is it a usable predictor: it explains about 1% of the variance. Both
-    numbers are published so that neither claim can be made on its own.
+    A bare rho invites two opposite misreadings - "no relationship" and "good
+    enough to use" - and which one is tempting depends on the population, since
+    the connection-tier figure moves from 0.11 on OpenStreetMap farmland to 0.38
+    on cadastral units. Publishing rho, the p-value, the interval and the
+    variance explained together is what stops either claim being made alone.
     """
     result = stats.spearmanr(left, right)
     rho = float(result.statistic)

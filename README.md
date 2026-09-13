@@ -159,15 +159,15 @@ still nowhere near a substitute for knowing where the 33–66 kV network is, but
 is an order of magnitude more than I had been claiming, and the claim as
 published was wrong.
 
-The ordering below is the finding, and it is monotonic in voltage. A road centreline is a decent stand-in for the low-voltage network — of course it is, the poles follow the road. It is close to useless for the 33–66 kV tier a project would actually connect to, and the right way to say that is precise:
+The ordering below is the finding, and it is monotonic in voltage. A road centreline is a good stand-in for the low-voltage network — of course it is, the poles follow the road — and a steadily worse one as the voltage rises. Stated on the population a developer would actually screen:
 
-> Spearman ρ = **0.108**, 95% CI **[0.068, 0.148]**, p = 1.4 × 10⁻⁷, n = 2,356.
+> **Cadastral units, n = 10,684.** Road distance against 33–66 kV distance: Spearman ρ = **0.379**, 95% CI **[0.363, 0.395]**, p < 10⁻³⁰⁰, explaining **14.3%** of the variance. Against ≤22 kV distribution: ρ = **0.570**. Against ≥110 kV transmission: ρ = **0.045**.
 
-That relationship is **statistically significant and practically negligible**. At this sample size a correlation this small is comfortably distinguishable from zero — it is not "no relationship" — but it explains **1.2% of the variance** in connection-tier proximity, and the two top-50 shortlists share no sites at all. The study publishes rho, the p-value, the confidence interval and the variance explained together, computed with `scipy.stats.spearmanr`, precisely so that neither half of that sentence can be quoted without the other.
+So a road proxy carries real information about where the low-voltage network is, appreciably less about the tier a project connects at, and effectively none about transmission. Fourteen per cent is not nothing and it is not a substitute: it leaves 86% of the variation in connection-tier distance unexplained, which is the part that decides a project. The comparison publishes rho, the p-value, the confidence interval and the variance explained together, computed with `scipy.stats.spearmanr`, so that no half of that sentence can be quoted without the others.
 
 The 33–66 kV tier is also not a stand-in for transmission (ρ = 0.31 between those two), so there is no single "distance to the grid" number to put in a score.
 
-**If you take one sentence to an interview:** on real Canterbury geometry, distance to a road explains about 1% of the variance in distance to 33–66 kV (ρ = 0.11, real but negligible) against 22% for 11 kV (ρ = 0.47) — so a road proxy tells you where the low-voltage network is, not where you could connect.
+**If you take one sentence to an interview:** on real Canterbury cadastral units, distance to a road explains about **14%** of the variance in distance to the 33–66 kV network, and the figure falls monotonically with voltage — 0.57 for ≤22 kV, 0.38 for 33–66 kV, 0.045 for ≥110 kV — an ordering that holds on two independently built populations. A road proxy tells you where the low-voltage poles are, not where you could connect.
 
 ### The verify flag had to be re-cut too
 
@@ -426,7 +426,7 @@ Three things the real run exposed that the demo could not:
 - **LINZ Topo50 powerlines carry no voltage attribute** — the layer has
   `t50_fid` and `support_ty` and nothing else. So the voltage tiering has
   nothing to tier on and falls back to the whole layer, which `grid_basis`
-  records as `all_mapped_powerlines`. The ρ = 0.11 connection-tier finding is
+  records as `all_mapped_powerlines`. The connection-tier analysis is
   reproducible on OpenStreetMap, which tags voltage, and **not** on LINZ, which
   does not. That is worth knowing before quoting it as a LINZ result.
 - **S-08, S-09 and S-10 now run in `solar-screen`.** They used to live only in
@@ -549,6 +549,7 @@ Both are executed top to bottom by `tests/test_notebooks.py`, so they cannot qui
 - `data/derived/osm/site_terrain.csv` — per-site mean and p90 slope from Copernicus GLO-30
 - `outputs/osm/osm_grid_disagreement.png` — proxy scatter and the top-N agreement sweep
 - `outputs/osm/grid_basis_comparison.json` — the three line layers side by side, with the OSM transmission recall against Transpower
+- `outputs/cadastral_grid_basis_comparison.json` — the same comparison on the cadastral population; aggregate statistics only, and not CI-reproducible because its input is LRIS-derived
 
 ## Demo versus real data
 
@@ -560,7 +561,7 @@ The market series are different: both the ISL0661 half-hourly final prices and t
 
 ## Validation
 
-One hundred and forty-eight automated tests cover shared configuration and both CLIs, CRS/schema/geometry gates, exclusion and flag rules, both width methods, candidate-only ranking, spatial-indexed nearest distance, configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, strict market-value input validity, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry, seasonal/intraday decomposition, the metered load control, sensitivities, OSM voltage tiers, terrain and water rules, aerial-review evidence, the real-data assembly path against fixtures — publisher column spellings, multipart splitting, geometry-derived identifiers, the refusal to run without an API key, on a placeholder key or on an implausibly short one, and portal errors that name the status without echoing the key, that every third-party import is declared in `pyproject.toml` including the two that are imported lazily inside functions, that `environment.yml` matches — the rule register as a contract against the library that implements it — every registered rule now has to have a column in evaluate_sites, which is what caught S-08 to S-10 living only in a script — the single S-06 implementation and its refusal to flag on rank shift, the held-out sample B scorecard, the side-by-side grid bases and that the monotonic-in-voltage ordering survives a rerun, the measured OpenStreetMap transmission recall against Transpower, and top-to-bottom notebook execution.
+One hundred and eighty-six automated tests cover shared configuration and both CLIs, CRS/schema/geometry gates, exclusion and flag rules, both width methods, candidate-only ranking, spatial-indexed nearest distance, configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, strict market-value input validity, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry, seasonal/intraday decomposition, the metered load control, sensitivities, OSM voltage tiers, terrain and water rules, aerial-review evidence, the real-data assembly path against fixtures — publisher column spellings, multipart splitting, geometry-derived identifiers, the refusal to run without an API key, on a placeholder key or on an implausibly short one, and portal errors that name the status without echoing the key, that every third-party import is declared in `pyproject.toml` including the two that are imported lazily inside functions, that `environment.yml` matches — the rule register as a contract against the library that implements it — every registered rule now has to have a column in evaluate_sites, which is what caught S-08 to S-10 living only in a script — the single S-06 implementation and its refusal to flag on rank shift, the held-out sample B scorecard, the side-by-side grid bases and that the monotonic-in-voltage ordering survives a rerun, the measured OpenStreetMap transmission recall against Transpower, that no superseded claim survives outside the correction that supersedes it — in the README, the dashboard, the notebooks or the scripts — and that the headline figures match the published statistics file, and top-to-bottom notebook execution.
 
 GitHub Actions installs the committed lock, reruns both complete pipelines and compares the full tracked output-file manifest. It strictly diffs CSV/JSON; because GeoPackage and PNG bytes vary across operating systems, `scripts/verify_reproduced_outputs.py` compares GeoPackages by fields and geometry and applies a bounded pixel-difference check to every generated figure. Binary outputs are therefore covered without requiring byte-identical cross-platform files.
 

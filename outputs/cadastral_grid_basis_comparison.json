@@ -1,0 +1,110 @@
+{
+  "population": "LINZ NZ Primary Land Parcels intersected with usable LCDB cover, passing S-01 and S-02",
+  "sites": 10684,
+  "review_distance_m": 5000.0,
+  "note": "Bases are reported side by side and never merged: grid_basis in the screen records which layer a distance came from, and combining layers would destroy that column's meaning.",
+  "sources": {
+    "topo50_all_lines": "LINZ Topo50 powerline centrelines, CC BY; no voltage attribute",
+    "osm_33_66kv": "OpenStreetMap, ODbL; voltage tagged",
+    "osm_22kv_and_below": "OpenStreetMap, ODbL; voltage tagged",
+    "osm_110kv_plus": "OpenStreetMap, ODbL; voltage tagged",
+    "transpower_110kv_plus": "Transpower open data, CC BY; designvolt, commissioned only",
+    "road": "OpenStreetMap road centrelines, ODbL"
+  },
+  "features": {
+    "topo50_all_lines": 347,
+    "osm_tiers": {
+      "untagged_voltage": 994,
+      "excluded_above_threshold": 4,
+      "transmission_110kv_plus": 65,
+      "subtransmission_33_66kv": 541,
+      "distribution_22kv": 5134
+    },
+    "transpower_tiers": {
+      "untagged_voltage": 0,
+      "excluded_above_threshold": 1,
+      "transmission_110kv_plus": 11,
+      "subtransmission_33_66kv": 12,
+      "distribution_22kv": 0
+    }
+  },
+  "median_distance_m": {
+    "topo50_all_lines": 1684.8,
+    "osm_33_66kv": 2817.0,
+    "osm_22kv_and_below": 16.4,
+    "osm_110kv_plus": 8053.3,
+    "transpower_110kv_plus": 7698.1,
+    "road": 9.8
+  },
+  "correlation_with_road_distance": {
+    "topo50_all_lines": {
+      "spearman_rho": 0.0232,
+      "p_value": 0.0164,
+      "variance_explained": 0.0005,
+      "confidence_interval_95": [
+        0.0043,
+        0.0422
+      ],
+      "n": 10684
+    },
+    "osm_33_66kv": {
+      "spearman_rho": 0.3788,
+      "p_value": 0.0,
+      "variance_explained": 0.1435,
+      "confidence_interval_95": [
+        0.3625,
+        0.395
+      ],
+      "n": 10684
+    },
+    "osm_22kv_and_below": {
+      "spearman_rho": 0.57,
+      "p_value": 0.0,
+      "variance_explained": 0.3249,
+      "confidence_interval_95": [
+        0.5571,
+        0.5827
+      ],
+      "n": 10684
+    },
+    "osm_110kv_plus": {
+      "spearman_rho": 0.0448,
+      "p_value": 3.67e-06,
+      "variance_explained": 0.002,
+      "confidence_interval_95": [
+        0.0258,
+        0.0637
+      ],
+      "n": 10684
+    },
+    "transpower_110kv_plus": {
+      "spearman_rho": 0.0262,
+      "p_value": 0.00667,
+      "variance_explained": 0.0007,
+      "confidence_interval_95": [
+        0.0073,
+        0.0452
+      ],
+      "n": 10684
+    }
+  },
+  "top_50_overlap_with_road": {
+    "topo50_all_lines": 0.0,
+    "osm_33_66kv": 0.01,
+    "osm_22kv_and_below": 0.042,
+    "osm_110kv_plus": 0.0,
+    "transpower_110kv_plus": 0.0
+  },
+  "verify_flag_agreement": {
+    "topo50_all_lines|osm_33_66kv": 0.6895,
+    "topo50_all_lines|transpower_110kv_plus": 0.4941,
+    "osm_33_66kv|transpower_110kv_plus": 0.5142
+  },
+  "osm_transmission_recall_against_transpower": {
+    "tolerance_m": 250.0,
+    "transpower_length_km": 1571.1,
+    "covered_km": 1039.6,
+    "recall": 0.662
+  },
+  "reproducibility": "Aggregate statistics only, no geometry. Produced by scripts/grid_basis_comparison.py --sites data/derived/real/sites.gpkg on 2026-09-13. That input is built from LRIS portal data this project does not redistribute, so this file cannot be regenerated in CI; the OpenStreetMap-population equivalent at outputs/osm/grid_basis_comparison.json can be, and is."
+}
