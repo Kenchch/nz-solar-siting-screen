@@ -42,6 +42,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 
 from nz_solar_siting.config import load_project_config
@@ -157,6 +158,49 @@ def fetch_layer(
     return gpd.GeoDataFrame(combined, geometry="geometry", crs="EPSG:2193")
 
 
+class MissingRasterExport(RuntimeError):
+    """Raised when a raster-only layer has not been exported yet."""
+
+
+def sample_raster(sites: gpd.GeoDataFrame, path: Path, label: str) -> pd.Series:
+    """Mean raster value inside each polygon, from a locally exported GeoTIFF.
+
+    Some LRIS layers are grids, and a grid has no WFS feature type: the portal
+    serves rendered WMTS tiles, whose pixels are palette colours rather than
+    measurements. Reading a value therefore needs the raster itself, exported
+    once from the layer page.
+    """
+    import rasterio
+    from rasterio.features import geometry_mask
+
+    with rasterio.open(path) as dataset:
+        if dataset.crs is None:
+            raise MissingRasterExport(f"{label}: {path} has no CRS")
+        frame = sites.to_crs(dataset.crs)
+        band = dataset.read(1, masked=True)
+        values = []
+        for geometry in frame.geometry:
+            window = rasterio.windows.from_bounds(*geometry.bounds, transform=dataset.transform)
+            row = max(0, int(window.row_off))
+            col = max(0, int(window.col_off))
+            height = min(band.shape[0] - row, int(window.height) + 1)
+            width = min(band.shape[1] - col, int(window.width) + 1)
+            if height <= 0 or width <= 0:
+                values.append(float("nan"))
+                continue
+            patch = band[row:row + height, col:col + width]
+            transform = dataset.window_transform(
+                rasterio.windows.Window(col, row, width, height)
+            )
+            mask = ~geometry_mask(
+                [geometry], out_shape=patch.shape, transform=transform,
+                invert=False, all_touched=True,
+            )
+            selected = patch[mask & ~patch.mask] if hasattr(patch, "mask") else patch[mask]
+            values.append(float(selected.mean()) if selected.size else float("nan"))
+    return pd.Series(values, index=sites.index, dtype=float)
+
+
 def first_present(frame: gpd.GeoDataFrame, candidates: tuple[str, ...], label: str) -> str:
     """Resolve an attribute name across publisher spellings, or say what is there."""
     lookup = {str(column).strip().lower(): column for column in frame.columns}
@@ -209,13 +253,16 @@ def build_sites(
     sites = sites.loc[sites.geometry.area >= minimum_area_ha * 10_000.0].reset_index(drop=True)
 
     luc_column = first_present(luc, tuple(config["luc_class_fields"]), "luc")
-    solar_column = first_present(solar, tuple(config["solar_value_fields"]), "solar")
     sites["luc_class"] = pd.to_numeric(
         attach_by_point(sites, luc, luc_column, "luc_class"), errors="coerce"
     )
-    sites["solar_kwh_m2"] = pd.to_numeric(
-        attach_by_point(sites, solar, solar_column, "solar_kwh_m2"), errors="coerce"
-    )
+    if isinstance(solar, gpd.GeoDataFrame):
+        solar_column = first_present(solar, tuple(config["solar_value_fields"]), "solar")
+        sites["solar_kwh_m2"] = pd.to_numeric(
+            attach_by_point(sites, solar, solar_column, "solar_kwh_m2"), errors="coerce"
+        )
+    else:
+        sites["solar_kwh_m2"] = sample_raster(sites, solar, "solar")
     # A site with no LUC or no solar value cannot be screened by S-05 or S-07.
     # Dropping it silently would hide a join failure, so report and quarantine.
     incomplete = sites["luc_class"].isna() | sites["solar_kwh_m2"].isna()
@@ -255,6 +302,18 @@ def preflight(services: dict[str, tuple[str, str]], layers: dict, timeout: int) 
     print("preflight:", flush=True)
     problems: list[str] = []
     for name, spec in layers.items():
+        if spec.get("source") == "raster_export":
+            path = ROOT / spec["raster_path"]
+            state = "present" if path.exists() else "NOT EXPORTED"
+            print(f" {' ' if path.exists() else '?'} {name:<12} raster           {state}: "
+                  f"{spec['raster_path']}", flush=True)
+            if not path.exists():
+                problems.append(
+                    f"{name} needs a one-off GeoTIFF export from {spec['export_page']} "
+                    f"saved to {spec['raster_path']} (it is a grid layer; LRIS offers no WCS "
+                    f"for it, so its values cannot be read over the web services)"
+                )
+            continue
         service, key = services[spec["portal"]]
         layer_id = int(spec["layer_id"])
         title = describe_layer(service, key, layer_id, timeout)
@@ -264,8 +323,9 @@ def preflight(services: dict[str, tuple[str, str]], layers: dict, timeout: int) 
             problems.append(f"{name} (layer-{layer_id}, {spec['portal']})")
     if problems:
         raise ServiceError(
-            "these layers did not describe themselves: " + ", ".join(problems)
-            + ". Check the API key, and check each layer id against its portal page."
+            "preflight failed:\n  - " + "\n  - ".join(problems)
+            + "\nCheck each layer id against its portal page, and accept the licence there "
+            "if you have not already."
         )
 
 
@@ -293,6 +353,8 @@ def main() -> None:
 
     downloaded: dict[str, gpd.GeoDataFrame] = {}
     for name, spec in layers.items():
+        if spec.get("source") == "raster_export":
+            continue
         service, key = services[spec["portal"]]
         layer_id = int(spec["layer_id"])
         print(f"  {name}: downloading layer-{layer_id}", flush=True)
@@ -306,8 +368,14 @@ def main() -> None:
         downloaded[name] = frame
         print(f"  {name}: {len(frame)} features", flush=True)
 
+    solar_spec = layers["solar"]
+    solar_source = (
+        ROOT / solar_spec["raster_path"]
+        if solar_spec.get("source") == "raster_export"
+        else downloaded["solar"]
+    )
     sites = build_sites(
-        downloaded["landcover"], downloaded["luc"], downloaded["solar"],
+        downloaded["landcover"], downloaded["luc"], solar_source,
         usable, project.siting.minimum_area_ha, settings,
     )
     complete = sites.dropna(subset=["luc_class", "solar_kwh_m2"]).reset_index(drop=True)

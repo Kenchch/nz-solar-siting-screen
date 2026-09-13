@@ -254,12 +254,24 @@ lookup at each polygon's representative point.
 Three things about it are worth knowing before the first run:
 
 - **Layer ids live in `config/assumptions.yml`**, because publishers reissue
-  datasets and the ids move. The script prints the title the service returns for
-  each id *before* downloading, so the wrong layer shows up in the first lines of
-  output rather than in the results. Two ids are taken from
-  [rules/SOURCES.md](rules/SOURCES.md) (LCDB v5.0 `104400`, LENZ solar `48095`);
-  the rest are marked `verify` in the config and should be checked against the
-  portal page once.
+  datasets and the ids move. All six have now been checked against the live
+  services, and three of the six first guesses were wrong: NZLRI LUC is `48076`
+  and not `48079`, LINZ Protected Areas is `53564` and not `754` (which
+  describes itself happily and then returns nothing), and LCDB v5.0 `104400` is
+  now marked deprecated on the portal in favour of v6.0 `123148`. The preflight
+  is what found all three.
+- **The solar layer cannot come over the web services at all.** LENZ mean annual
+  solar radiation is a raster; LRIS serves it as WMTS image tiles and offers no
+  WCS, and a rendered tile's pixels are palette colours rather than kWh/m². It
+  has to be exported once from [its layer page](https://lris.scinfo.org.nz/layer/48095)
+  as a GeoTIFF into `data/raw/lris/`, after which the script samples it per
+  polygon — the same pattern the Copernicus DEM already uses. The preflight says
+  so by name when the file is absent.
+- **The LUC class field is a trap.** NZLRI publishes `lcorrclass` (an integer)
+  and `domluc` (a string), but also `lcorr`, which holds the full correlation
+  code such as `3s 5`. Reading `lcorr` parses to NaN and would blank every LUC
+  class while looking like a successful join, so the accepted field list puts
+  the two real ones first and excludes `lcorr` explicitly.
 - **Site identifiers are derived from the geometry**, not from the order the
   service happened to page features back, so a re-download does not renumber
   every site.
@@ -267,12 +279,18 @@ Three things about it are worth knowing before the first run:
   to `sites_unattributed.gpkg` with a count on stdout, because a silent drop
   would hide a failed join.
 
-**This path is tested against fixtures, not against the live services.**
+**Status of the live run.** Five of the six layers have been fetched from the
+real services and their schemas confirmed: LCDB polygons carry `Name_2018`,
+NZLRI carries `lcorrclass`, the LINZ powerline and road centrelines and the
+Protected Areas layer all return features in the study bbox. The sixth, solar,
+is waiting on the one-off raster export described above, so no full screening
+run has been produced yet.
+
 `tests/test_real_sites.py` exercises the assembly on layers shaped like the real
 ones — publisher column spellings, multipart polygons, sites outside every
-source polygon — but no test has touched LRIS or LINZ. Treat the first live run
-as a verification run: check the printed layer titles, the feature counts and
-the unattributed count before trusting any output.
+source polygon, placeholder API keys — but the tests themselves never touch the
+portals. Treat the first complete run as a verification run: check the feature
+counts and the unattributed count before trusting any output.
 
 Once it has run, S-05 finally has real parcels behind it. The NPS-HPL flag is
 the rule that most needs them: it is a **flag** precisely because LUC class

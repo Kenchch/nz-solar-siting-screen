@@ -105,10 +105,23 @@ real_data:
       dataset_note: mainland New Zealand
     luc:
       portal: lris
-      layer_id: 48079    # NZLRI Land Use Capability - verify on the portal page
+      # Verified against the LRIS catalogue on 13 September 2026. The previously
+      # configured 48079 does not answer DescribeFeatureType; 48076 is the
+      # published NZLRI Land Use Capability 2021 layer.
+      layer_id: 48076
+      dataset_version: NZLRI Land Use Capability 2021
+    # LENZ mean annual solar radiation is a raster. LRIS serves it as WMTS
+    # image tiles and offers no WCS, so there is no way to read values out of
+    # the web services - rendered tiles carry colours, not kWh/m2. It has to be
+    # exported once from the layer page as a GeoTIFF and sampled locally, the
+    # same pattern the Copernicus DEM already uses.
     solar:
       portal: lris
-      layer_id: 48095    # LENZ mean annual solar radiation
+      layer_id: 48095
+      source: raster_export
+      raster_path: data/raw/lris/lenz_mean_annual_solar_radiation.tif
+      export_page: https://lris.scinfo.org.nz/layer/48095
+      dataset_version: LENZ mean annual solar radiation
     powerlines:
       portal: linz
       layer_id: 50311    # NZ Powerline Centrelines (Topo 1:50k) - verify
@@ -117,11 +130,19 @@ real_data:
       layer_id: 50329    # NZ Road Centrelines (Topo 1:50k) - verify
     conservation:
       portal: linz
-      layer_id: 754      # DOC Public Conservation Areas - verify
+      # Verified against the LINZ catalogue on 13 September 2026. The previously
+      # configured 754 describes but returns nothing; 53564 is the published
+      # Protected Areas layer.
+      layer_id: 53564
+      dataset_version: LINZ Protected Areas
   # Publishers spell these differently between releases; the first match wins and
   # a miss reports the columns that were actually present.
   landcover_class_fields: [Name_2018, Name_2012, Class_2018, lcdb_class, Name]
-  luc_class_fields: [lucl, LUC, luc_class, lcorr, Class]
+  # NZLRI publishes the class as an integer in lcorrclass and as a string in
+  # domluc. lcorr is deliberately absent: it holds the full correlation code
+  # such as '3s 5', which parses to NaN and would silently blank every LUC
+  # class while looking like a successful join.
+  luc_class_fields: [lcorrclass, domluc, lucl, LUC, luc_class]
   solar_value_fields: [solrad, Solar_Radiation, mean_annual_solar_radiation, solar_kwh_m2, Value]
 
 market:
