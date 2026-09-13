@@ -22,7 +22,7 @@ import pandas as pd
 from .load import assert_nztm
 
 DEFAULT_DIRECTORY = Path("data/derived/osm")
-LAYER_NAMES = ("farmland", "powerlines", "roads")
+LAYER_NAMES = ("farmland", "powerlines", "roads", "wetland", "coastline")
 
 
 def max_voltage_v(label: object) -> float:
@@ -100,6 +100,6 @@ def read_osm_layer(name: str, directory: str | Path = DEFAULT_DIRECTORY) -> gpd.
 
 def read_osm_layers(
     directory: str | Path = DEFAULT_DIRECTORY,
-) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame, gpd.GeoDataFrame]:
-    """Return farmland polygons, powerlines and road centrelines."""
+) -> tuple[gpd.GeoDataFrame, ...]:
+    """Return farmland, powerlines, roads, water/wetland and coastline layers."""
     return tuple(read_osm_layer(name, directory) for name in LAYER_NAMES)

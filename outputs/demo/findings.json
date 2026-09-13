@@ -22,7 +22,7 @@
   },
   "osm_grid_study": {
     "source": "OpenStreetMap contributors, ODbL; Canterbury plains extract",
-    "scope": "S-01 area and S-02 width only; land cover, LUC and solar resource still require portal-controlled datasets",
+    "scope": "S-01 area and S-02 width define the population; S-08 slope and S-09 water exclude, S-10 coastal flags. Land cover, LUC class and solar resource still require portal-controlled datasets",
     "crs": "EPSG:2193",
     "farmland_polygons_downloaded": 9102,
     "sites_passing_area_and_width": 2356,
@@ -72,6 +72,16 @@
       "distribution_22kv": 77
     },
     "verify_grid_flagged": 372,
+    "terrain_water": {
+      "maximum_mean_slope_deg": 10.0,
+      "coastal_review_distance_m": 1000.0,
+      "median_mean_slope_deg": 0.77,
+      "excluded_by_slope": 113,
+      "excluded_by_water": 106,
+      "excluded_by_either": 206,
+      "flagged_coastal": 133,
+      "surviving_sites": 2150
+    },
     "top_n_sweep": {
       "transmission_110kv_plus_m|road_m": [
         {
@@ -279,6 +289,23 @@
       "reviewed": 20,
       "not_developable": 11,
       "false_positive_rate": 0.55,
+      "selection": "the largest connection-tier-versus-road rank disagreements; selected on disagreement, so this rate describes the road proxy's worst cases and not the candidate population",
+      "in_sample_rule_check": {
+        "excluded_by_slope": 4,
+        "excluded_by_water": 4,
+        "excluded_total": 8,
+        "flagged_only_by_coast": 2,
+        "neither_excluded_nor_flagged": [
+          "OSM-1106896738"
+        ],
+        "developable_sites_wrongly_excluded": 0,
+        "developable_sites_flagged_only": 0
+      },
+      "second_pass": {
+        "confirmed": 19,
+        "corrected": 1,
+        "author_confirmed": 0
+      },
       "log": "data/aerial_review_log.csv"
     }
   },

@@ -101,7 +101,8 @@
           <h3>The aerial step is not optional</h3>
           <p>All twenty of the largest road-versus-connection-tier disagreements were checked against LINZ Basemaps aerial imagery, with the verdict and imagery recorded per site.</p>
           <p id="aerial-summary">Loading aerial review&hellip;</p>
-          <p class="caveat">None of those failures is a grid problem, and the screen as built catches none of them: S-08 slope is not implemented and there is no coastal-hazard or wetland rule. Aerial imagery &copy; LINZ and Environment Canterbury, CC BY 4.0.</p>
+          <p id="aerial-rules">&nbsp;</p>
+          <p class="caveat"><strong>These twenty were selected because they are the largest disagreements</strong>, which biases them towards coast and peninsula edges. The rate describes the road proxy&rsquo;s worst cases, not the candidate population &mdash; across all sites the new rules exclude <span id="aerial-population">&mdash;</span>. Thresholds were set with these labels in view, so the hit rate is in-sample. Verdicts were made by an AI agent from the committed imagery and are not independently confirmed. Aerial imagery &copy; LINZ and Environment Canterbury, CC BY 4.0; elevation from Copernicus GLO-30, &copy; European Union / ESA.</p>
         </aside>
       </div>
     </section>
@@ -151,6 +152,7 @@
         <li><span>S-01—04</span><strong>Exclude</strong><p>Area, shape, land cover and conservation intersections send records to quarantine with rule IDs.</p></li>
         <li><span>S-05</span><strong>Flag</strong><p>LUC 1–3 triggers planning review under the amended NPS-HPL; it does not disappear from the analysis.</p></li>
         <li><span>S-06—07</span><strong>Rank</strong><p>Grid distance is reported twice and kept out of the score. Only solar resource and usable area order the review queue.</p></li>
+        <li><span>S-08—10</span><strong>Terrain</strong><p>Mean slope from a free DEM and mapped water exclude; coastal proximity flags. These rules exist because an aerial check found the screen was missing them.</p></li>
         <li><span>QA</span><strong>Stop</strong><p>Wrong CRS fails immediately. A suspiciously high reject rate aborts publication instead of silently producing a map.</p></li>
       </ol>
     </section>

@@ -57,6 +57,22 @@ LAYERS = {
         "kind": "area",
         "keep": ("landuse", "crop"),
     },
+    # Terrain and water layers, added after an aerial review found that most of
+    # the screen's worst false positives were coastal or wet rather than
+    # anything to do with the grid.
+    "wetland": {
+        "filters": [
+            '["natural"~"^(wetland|water)$"]',
+            '["landuse"="basin"]',
+        ],
+        "kind": "area",
+        "keep": ("natural", "wetland", "landuse"),
+    },
+    "coastline": {
+        "filters": ['["natural"="coastline"]'],
+        "kind": "line",
+        "keep": ("natural",),
+    },
 }
 
 
