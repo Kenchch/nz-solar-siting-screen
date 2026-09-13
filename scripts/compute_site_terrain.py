@@ -147,7 +147,12 @@ def main() -> None:
         if path is None:
             continue
         with rasterio.open(path) as dataset:
-            gradient = slope_degrees(dataset.read(1), dataset.transform, lat + 0.5)
+            # Read masked so the tile's own NoData value does not become an
+            # elevation. A void neighbouring real ground would otherwise produce
+            # a cliff, and a cliff is exactly what S-08 excludes on.
+            elevation = dataset.read(1, masked=True)
+            valid = ~np.ma.getmaskarray(elevation)
+            gradient = slope_degrees(elevation.filled(np.nan), dataset.transform, lat + 0.5)
             left, bottom, right, top = dataset.bounds
             inside = geographic.cx[left:right, bottom:top]
             for index, geometry in zip(inside.index, inside.geometry):
@@ -166,27 +171,47 @@ def main() -> None:
                     [geometry], out_shape=patch.shape, transform=patch_transform,
                     invert=False, all_touched=True,
                 )
-                values = patch[mask]
+                patch_valid = valid[row_off:row_off + rows, col_off:col_off + cols]
+                values = patch[mask & patch_valid]
+                values = values[np.isfinite(values)]
                 if values.size == 0:
                     continue
                 records.append({
                     "site_id": sites.at[index, "site_id"],
                     "dem_tile": tile_stem(lat, lon),
-                    "slope_samples": int(values.size),
-                    "mean_slope_deg": float(values.mean()),
-                    "p90_slope_deg": float(np.percentile(values, 90)),
+                    "samples": values,
                 })
 
-    terrain = pd.DataFrame(records)
-    # A polygon straddling two tiles appears twice; keep the better-sampled row.
-    terrain = terrain.sort_values(["site_id", "slope_samples"], ascending=[True, False])
-    terrain = terrain.drop_duplicates("site_id").sort_values("site_id").reset_index(drop=True)
+    # A polygon straddling a tile boundary is sampled once per tile. Keeping
+    # only the better-sampled row would report the mean of the larger fragment
+    # as the mean of the site; pooling the samples measures the whole polygon.
+    pooled: dict[str, dict[str, object]] = {}
+    for record in records:
+        entry = pooled.setdefault(
+            record["site_id"], {"site_id": record["site_id"], "tiles": [], "samples": []}
+        )
+        entry["tiles"].append(record["dem_tile"])
+        entry["samples"].append(record["samples"])
+    rows = []
+    for entry in pooled.values():
+        values = np.concatenate(entry["samples"])
+        rows.append({
+            "site_id": entry["site_id"],
+            "dem_tile": ";".join(sorted(set(entry["tiles"]))),
+            "dem_tiles_used": len(set(entry["tiles"])),
+            "slope_samples": int(values.size),
+            "mean_slope_deg": float(values.mean()),
+            "p90_slope_deg": float(np.percentile(values, 90)),
+        })
+    terrain = pd.DataFrame(rows).sort_values("site_id").reset_index(drop=True)
     missing = sorted(set(sites["site_id"]) - set(terrain["site_id"]))
     if missing:
         print(f"warning: no DEM samples for {len(missing)} sites, e.g. {missing[:3]}")
     terrain = terrain.round({"mean_slope_deg": 3, "p90_slope_deg": 3})
     output = ROOT / arguments.output
     terrain.to_csv(output, index=False)
+    straddling = int((terrain["dem_tiles_used"] > 1).sum())
+    print(f"sites sampled across more than one DEM tile: {straddling}")
     print(terrain["mean_slope_deg"].describe().round(2).to_string())
     print(f"wrote {output} ({len(terrain)} rows)")
 

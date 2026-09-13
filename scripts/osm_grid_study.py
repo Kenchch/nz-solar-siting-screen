@@ -42,7 +42,11 @@ import pandas as pd
 
 from scipy import stats
 
-from nz_solar_siting.config import load_project_config, verify_data_checksums
+from nz_solar_siting.config import (
+    load_project_config,
+    resolve_output_directory,
+    verify_data_checksums,
+)
 from nz_solar_siting.geometry import area_hectares, has_width_core
 from nz_solar_siting.grid_distance import (
     compare_top_n,
@@ -100,6 +104,10 @@ def rank_correlation(left: pd.Series, right: pd.Series) -> dict[str, object]:
     the connection-tier figure moves from 0.11 on OpenStreetMap farmland to 0.38
     on cadastral units. Publishing rho, the p-value, the interval and the
     variance explained together is what stops either claim being made alone.
+
+    rho squared is the variance explained in the ranks, not in the raw metres,
+    and the p-value assumes independent observations, which spatially clustered
+    land parcels are not.
     """
     result = stats.spearmanr(left, right)
     rho = float(result.statistic)
@@ -189,9 +197,7 @@ def main() -> None:
     # drift away from what the screen itself does.
     tiers = {tier.name: tier for tier in config.voltage_tiers}
     connection_tier = config.connection_tier
-    output = (ROOT / arguments.output).resolve()
-    if output == ROOT or not output.is_relative_to(ROOT):
-        raise ValueError("--output must be a directory inside the repository")
+    output = resolve_output_directory(arguments.output, ROOT)
     if output.exists():
         shutil.rmtree(output)
     output.mkdir(parents=True, exist_ok=True)
