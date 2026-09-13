@@ -1,6 +1,6 @@
 # Data acquisition
 
-Full raw files are intentionally excluded from Git. Record every downloaded file in `checksums.sha256` and transform all spatial inputs to EPSG:2193 before screening. The filtered, gzip-compressed ISL0661 series in `data/derived/` is the committed deterministic market input used by CI.
+Full raw files are intentionally excluded from Git. Record every downloaded file in `checksums.sha256` and transform all spatial inputs to EPSG:2193 before screening. The filtered, gzip-compressed ISL0661 price and load series in `data/derived/` are the committed deterministic market inputs used by CI.
 
 | Input | Publisher / entry point | Access and licence | Retrieved for this repository |
 |---|---|---|---|
@@ -11,6 +11,8 @@ Full raw files are intentionally excluded from Git. Record every downloaded file
 | Conservation areas | DOC Open Spatial Data / LINZ | Open data; check item metadata | Workflow documented; not redistributed |
 | Regional boundary | LINZ Data Service | CC BY 4.0 | Workflow documented; not redistributed |
 | Half-hourly final prices | Electricity Authority Data & Insights | Public CSV | Retrieval script included; demo output identifies status |
+| Half-hourly metered grid export (load) | Electricity Authority Data & Insights | Public CSV | Retrieval script included; filtered ISL0661 series committed |
+| OSM farmland, power lines, road centrelines | OpenStreetMap via Overpass | ODbL 1.0, no account | Canterbury plains extract committed under attribution |
 
 ## Spatial workflow
 
@@ -22,6 +24,18 @@ Full raw files are intentionally excluded from Git. Record every downloaded file
 ## Electricity prices
 
 The current canonical discovery page is the Electricity Authority **Data & Insights** hub. The old EMI URLs may redirect to the same public Azure-hosted files and remain useful as stable machine-download paths. This was checked on 13 September 2026. `scripts/download_ea_prices.py` downloads monthly official CSVs, filters to `ISL0661`, preserves trading date and period, and creates an unambiguous UTC timestamp. Daylight-saving start/end days contain 46/50 periods respectively; no wall-clock string is used as a join key.
+
+## Load control series
+
+`scripts/download_ea_load.py` downloads the monthly **Grid export** files from the same hub and filters them to `ISL0661`, which is metered energy leaving the grid at that point of connection - that is, local demand at the node the price series already uses. The wide `TP1..TP50` layout is unpivoted onto the same UTC trading-period instants, values for a point of connection are summed across traders, and the trading-date label is normalised because its format changes across the archive. The result is the M3 control shape: a real alternative profile to compare the modelled solar shape against, rather than the flat profile, which is only an arithmetic invariant.
+
+## OpenStreetMap substitute
+
+LINZ Topo50, LCDB and LENZ all need portal accounts, so the grid-distance work ran on hand-drawn rectangles and was only ever a method demonstration. `scripts/download_osm_networks.py` fetches an open substitute with real geometry from Overpass for the Canterbury plains bounding box (`-44.3, 171.3, -43.0, 173.2`): `landuse` farmland/meadow/orchard/vineyard polygons, `power=line` and `power=minor_line` ways, and drivable road centrelines. Output is gzipped GeoJSON in EPSG:2193 with coordinates rounded to 0.1 m and features sorted by OSM id, so the committed extract is byte-stable and CI needs no live network.
+
+**Attribution: (c) OpenStreetMap contributors, data available under the Open Database Licence (ODbL 1.0).** Derived outputs in `outputs/osm/` inherit that licence.
+
+This is a substitute, not the intended source. OSM completeness varies by area and contributor, `power=minor_line` is not the same population as the LINZ powerline layer, and a mapped land-use polygon is a land-use observation rather than a parcel title. `data/aerial_review_log.csv` records the LINZ Basemaps aerial checks done on the largest disagreements, including one polygon that turned out to be a coastal sand spit.
 
 ## Demo boundary
 

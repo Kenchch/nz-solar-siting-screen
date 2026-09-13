@@ -1,2 +1,6 @@
-# Committed deterministic market input (filtered ISL0661 series; gzip mtime fixed at zero).
+# Committed deterministic inputs (filtered ISL0661 series and the OSM Canterbury extract; gzip mtime fixed at zero).
 ba29ba1c760cb5cfff8aa89ab753f808bb3bf3f0152d9390f1082e7f6b6294d2  derived/ISL0661_2019_2025.csv.gz
+3e1c6b700252ebb30e0044d699a917ec7cadf1a0c3887e0c32c76b7cf5fde215  derived/ISL0661_load_2019_2025.csv.gz
+2ec49ffcc4fcf2128a24866ac2b18a4f22224aa8fd7063dd7e37cfa1a6eccca0  derived/osm/farmland.geojson.gz
+849979cdbaaec17d2e90eea1baf512e39acdc5d32acf523b808ab5b20529cc0a  derived/osm/powerlines.geojson.gz
+ffacff8321580e0476b30e50a96598a70fefaf899f11d68c12201f4c470b42b7  derived/osm/roads.geojson.gz
