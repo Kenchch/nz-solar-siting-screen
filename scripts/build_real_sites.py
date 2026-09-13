@@ -128,19 +128,30 @@ def describe_layer(service: str, key: str, layer_id: int, timeout: int) -> str:
 
 
 def fetch_layer(
-    service: str, key: str, layer_id: int, bbox: tuple[float, float, float, float], timeout: int
+    service: str, key: str, layer_id: int, bbox: tuple[float, float, float, float],
+    timeout: int, attribute_filter: str | None = None,
 ) -> gpd.GeoDataFrame:
-    """Download one WFS layer inside the bounding box, paging until exhausted."""
+    """Download one WFS layer inside the bounding box, paging until exhausted.
+
+    An ``attribute_filter`` is combined with the bounding box into one CQL
+    expression, because this service rejects a ``bbox`` parameter and a
+    ``cql_filter`` in the same request.
+    """
     frames: list[gpd.GeoDataFrame] = []
     start = 0
+    box = "BBOX(shape, {:.1f},{:.1f},{:.1f},{:.1f},'EPSG:2193')".format(*bbox)
     while True:
-        query = urlencode({
+        parameters = {
             "service": "WFS", "version": "2.0.0", "request": "GetFeature",
             "typeNames": f"layer-{layer_id}", "outputFormat": "application/json",
             "srsName": "EPSG:2193",
-            "bbox": ",".join(f"{value:.1f}" for value in bbox) + ",EPSG:2193",
             "count": PAGE_SIZE, "startIndex": start,
-        })
+        }
+        if attribute_filter:
+            parameters["cql_filter"] = f"{attribute_filter} AND {box}"
+        else:
+            parameters["bbox"] = ",".join(f"{value:.1f}" for value in bbox) + ",EPSG:2193"
+        query = urlencode(parameters)
         payload = json.loads(
             _request(f"{service};key={key}/wfs?{query}", timeout, f"layer-{layer_id}")
         )
@@ -235,6 +246,34 @@ def attach_by_point(
     return joined[column].reindex(sites.index).rename(new_name)
 
 
+def usable_cover(
+    landcover: gpd.GeoDataFrame, usable_classes: tuple[str, ...], config: dict
+) -> gpd.GeoDataFrame:
+    class_column = first_present(landcover, tuple(config["landcover_class_fields"]), "landcover")
+    cover = landcover[[class_column, "geometry"]].rename(columns={class_column: "lcdb_class"})
+    cover["lcdb_class"] = cover["lcdb_class"].astype(str).str.strip()
+    return cover.loc[cover["lcdb_class"].isin(usable_classes)].copy()
+
+
+def intersect_with_parcels(
+    cover: gpd.GeoDataFrame, parcels: gpd.GeoDataFrame, keep_fields: list[str]
+) -> gpd.GeoDataFrame:
+    """Cut usable land cover to parcel boundaries.
+
+    A land-cover polygon is not a thing anyone can buy or lease: LCDB maps cover
+    and merges straight across ownership, which is how a single "site" reached
+    230,000 ha. The screening unit is the intersection, so an area rule finally
+    measures something a developer could negotiate for.
+    """
+    available = [field for field in keep_fields if field in parcels.columns]
+    trimmed = parcels[available + ["geometry"]].copy()
+    trimmed["geometry"] = trimmed.geometry.buffer(0)
+    cover = cover.copy()
+    cover["geometry"] = cover.geometry.buffer(0)
+    units = gpd.overlay(trimmed, cover, how="intersection", keep_geom_type=True)
+    return units
+
+
 def build_sites(
     landcover: gpd.GeoDataFrame,
     luc: gpd.GeoDataFrame,
@@ -242,13 +281,16 @@ def build_sites(
     usable_classes: tuple[str, ...],
     minimum_area_ha: float,
     config: dict,
+    parcels: gpd.GeoDataFrame | None = None,
 ) -> gpd.GeoDataFrame:
-    """Turn LCDB polygons into screening sites with the four required attributes."""
-    class_column = first_present(landcover, tuple(config["landcover_class_fields"]), "landcover")
-    sites = landcover[[class_column, "geometry"]].copy()
-    sites = sites.rename(columns={class_column: "lcdb_class"})
-    sites["lcdb_class"] = sites["lcdb_class"].astype(str).str.strip()
-    sites = sites.loc[sites["lcdb_class"].isin(usable_classes)].copy()
+    """Turn land cover into screening sites with the four required attributes."""
+    cover = usable_cover(landcover, usable_classes, config)
+    if parcels is not None:
+        sites = intersect_with_parcels(
+            cover, parcels, list(config["layers"]["parcels"]["keep_fields"])
+        )
+    else:
+        sites = cover.copy()
     # LCDB ships multipart polygons; the area and width rules are about one
     # contiguous block of land, so split before measuring anything.
     sites = sites.explode(index_parts=False).reset_index(drop=True)
@@ -284,10 +326,17 @@ def build_sites(
     sites = sites.assign(_x=bounds["minx"].round(1), _y=bounds["miny"].round(1))
     sites = sites.sort_values(["_x", "_y", "lcdb_class"], kind="stable").reset_index(drop=True)
     sites = sites.drop(columns=["_x", "_y"])
-    sites["site_id"] = [f"LCDB-{index:06d}" for index in range(len(sites))]
+    prefix = "PARCEL" if parcels is not None else "LCDB"
+    sites["site_id"] = [f"{prefix}-{index:06d}" for index in range(len(sites))]
+    columns = ["site_id", "lcdb_class", "luc_class", "solar_kwh_m2"]
+    # Parcel attributes are carried through for the reviewer: an appellation and
+    # a title reference is what turns a polygon into something you can look up.
+    columns += [
+        field for field in ("appellation", "titles", "parcel_intent", "calc_area")
+        if field in sites.columns
+    ]
     return gpd.GeoDataFrame(
-        sites[["site_id", "lcdb_class", "luc_class", "solar_kwh_m2", "geometry"]],
-        geometry="geometry", crs="EPSG:2193",
+        sites[columns + ["geometry"]], geometry="geometry", crs="EPSG:2193",
     )
 
 
@@ -351,6 +400,7 @@ def main() -> None:
     layers = settings["layers"]
     bbox = tuple(float(value) for value in settings["bbox_nztm"])
     usable = project.siting.usable_lcdb_classes
+    siting_values = project.assumptions["siting"]
     output = ROOT / arguments.output
     output.mkdir(parents=True, exist_ok=True)
 
@@ -361,14 +411,22 @@ def main() -> None:
 
     preflight(services, layers, arguments.timeout)
 
+    basis = str(settings.get("site_basis", "parcel_intersection"))
     downloaded: dict[str, gpd.GeoDataFrame] = {}
     for name, spec in layers.items():
         if spec.get("source") == "raster_export":
             continue
+        if name == "parcels" and basis != "parcel_intersection":
+            continue
         service, key = services[spec["portal"]]
         layer_id = int(spec["layer_id"])
-        print(f"  {name}: downloading layer-{layer_id}", flush=True)
-        frame = fetch_layer(service, key, layer_id, bbox, arguments.timeout)
+        attribute_filter = None
+        if spec.get("area_filter_from"):
+            threshold = float(siting_values[spec["area_filter_from"]]) * 10_000.0
+            attribute_filter = f"calc_area > {threshold:.0f}"
+        print(f"  {name}: downloading layer-{layer_id}"
+              + (f" where {attribute_filter}" if attribute_filter else ""), flush=True)
+        frame = fetch_layer(service, key, layer_id, bbox, arguments.timeout, attribute_filter)
         if frame.empty:
             raise RuntimeError(
                 f"{name}: layer-{layer_id} returned no features in the study bbox. "
@@ -387,6 +445,7 @@ def main() -> None:
     sites = build_sites(
         downloaded["landcover"], downloaded["luc"], solar_source,
         usable, project.siting.minimum_area_ha, settings,
+        parcels=downloaded.get("parcels"),
     )
     complete = sites.dropna(subset=["luc_class", "solar_kwh_m2"]).reset_index(drop=True)
     unattributed = sites.loc[~sites["site_id"].isin(complete["site_id"])]
@@ -406,6 +465,7 @@ def main() -> None:
         "layers": written,
         "candidate_polygons": int(len(complete)),
         "unattributed_polygons": int(len(unattributed)),
+        "site_basis": basis,
         "usable_lcdb_classes": list(usable),
         "next": (
             f"solar-screen --sites {relative}/sites.gpkg "

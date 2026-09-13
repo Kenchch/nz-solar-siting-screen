@@ -19,6 +19,7 @@ jobs:
       - run: uv sync --locked --all-extras
       - run: uv run --locked pytest
       - run: uv run --locked python scripts/osm_grid_study.py
+      - run: uv run --locked python scripts/grid_basis_comparison.py
       - run: uv run --locked python scripts/reproduce.py --demo
       - run: git diff --exit-code -- 'outputs/demo/*.csv' 'outputs/demo/*.json' 'outputs/osm/*.csv' 'outputs/osm/*.json' docs/data.json
       - run: uv run --locked python scripts/verify_reproduced_outputs.py

@@ -95,7 +95,22 @@ real_data:
   # Same Canterbury study area as the OpenStreetMap run, in EPSG:2193, so the
   # two are comparable: minx, miny, maxx, maxy.
   bbox_nztm: [1450000.0, 5080000.0, 1620000.0, 5230000.0]
+  # A candidate unit is a parcel intersected with usable land cover, not a
+  # land-cover polygon. LCDB maps cover and merges across ownership, so its
+  # polygons reach 230,000 ha and are not things anyone can buy or lease.
+  # Set to landcover_polygon to reproduce the earlier behaviour.
+  site_basis: parcel_intersection
   layers:
+    parcels:
+      portal: linz
+      layer_id: 50823
+      dataset_version: NZ Primary Land Parcels
+      # Road and hydro parcels live in sibling layers, so this one is already
+      # the land-only population. Any unit of at least minimum_area_ha needs a
+      # parent parcel at least that large, so filtering server-side loses
+      # nothing and turns 308,928 parcels in the study bbox into about 11,500.
+      area_filter_from: minimum_area_ha
+      keep_fields: [id, appellation, parcel_intent, titles, calc_area]
     landcover:
       portal: lris
       layer_id: 104400

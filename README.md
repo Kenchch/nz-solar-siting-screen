@@ -13,7 +13,7 @@ They are **reported side by side, not integrated**, and the seams are worth nami
 ## Two empirical findings, two method warnings
 
 1. **Empirical — generation is not revenue, and the reason is seasonal, not midday cannibalisation.** Official Electricity Authority half-hourly final prices at ISL0661 give apparent-solar-time capture rates from **82.5% to 110.3%** over 2019–2025 for a north-facing 25° array. Five of seven annual values are below 100%; 2019 and 2023 are above it. The worst year is 2024 at **82.5%**, a gap of 17.5 points below the time-average price. The decomposition below attributes **−17.7 points of it to seasonal mismatch**; the intraday term is **+0.2 points**, so the shape of the day actually gave a little value back. The discount is dry-year winter prices arriving when a fixed-tilt array produces least, not midday price suppression.
-2. **Empirical — a road proxy tracks the low-voltage network, not the one a project can connect to.** Measured on **2,356 real Canterbury farmland polygons** that pass the area and width rules, against mapped OpenStreetMap lines split by voltage. Spearman rank correlation with distance-to-road: **0.47** for ≤22 kV distribution, **0.11** for the 33–66 kV tier a Canterbury project actually connects at, **0.04** for ≥110 kV transmission — all significant at n = 2,356, and the middle one explains about 1% of the variance. Roads find the poles that are everywhere and say almost nothing about the connection that matters. This is why both distances and a `verify_grid` flag stay visible and why grid distance was removed from `screen_score` entirely. See [the OSM study](#measuring-the-grid-proxy-disagreement-on-real-geometry) for the caveats, which are substantial.
+2. **Empirical — a road proxy tracks the low-voltage network, and its usefulness falls monotonically with voltage.** Spearman rank correlation between distance-to-road and distance-to-network, on **10,684 real Canterbury cadastral units**: **0.57** for ≤22 kV distribution, **0.38** for the 33–66 kV tier a project actually connects at, **0.045** for ≥110 kV transmission, **0.023** for the LINZ Topo50 powerline layer. The ordering is the finding and it holds on a second, differently-built population. The magnitudes do not — see [the correction](#correction-the-1-of-the-variance-figure-was-population-specific). Roads find the poles that are everywhere and say almost nothing about the connection that matters. This is why both distances and a `verify_grid` flag stay visible and why grid distance was removed from `screen_score` entirely. See [the OSM study](#measuring-the-grid-proxy-disagreement-on-real-geometry) for the caveats, which are substantial.
 3. **Method warning — the screen was missing terrain and water, and an aerial check is what found it.** Of the twenty largest grid-proxy disagreements, **11 are not developable land at all** — coastal barrier spit, wetland margin, or 14–24° peninsula slope. None is a grid problem. S-08 slope was documented as "not implemented" and there was no water or coastal rule at all; all three now exist, built from free inputs, and on that sample they **exclude 8 of the 11, flag 2 more, and miss 1**. On a **held-out** second sample of twenty they reach 3 of 5, miss 2 — both land-use failures that only real land-cover data can catch — and wrongly exclude 1 good site over a farm irrigation pond. Those samples were selected on disagreement, so neither failure rate is a population rate.
 4. **Method warning — a single width proxy changes the screening answer.** The 180 m inward-buffer test is the S-02 baseline; `2A/P` remains beside it as an audit comparator. The deterministic geometry stress case is a 200 × 200 m square: the core test passes while `2A/P` reports 100 m and fails. The run manifest reports the number of disagreements instead of hiding this modelling choice.
 
@@ -130,21 +130,93 @@ An earlier version of this study split power lines by their OSM `power` tag, whi
 
 ![Grid proxy disagreement on OSM Canterbury geometry](outputs/osm/osm_grid_disagreement.png)
 
-The ordering is the finding, and it is monotonic in voltage. A road centreline is a decent stand-in for the low-voltage network — of course it is, the poles follow the road. It is close to useless for the 33–66 kV tier a project would actually connect to, and the right way to say that is precise:
+### Correction: the "1% of the variance" figure was population-specific
 
-> Spearman ρ = **0.108**, 95% CI **[0.068, 0.148]**, p = 1.4 × 10⁻⁷, n = 2,356.
+Everything in this section was computed on the OpenStreetMap farmland
+population. Re-running it on the cadastral units — same rules, same networks,
+a differently-built set of polygons — moves the connection-tier number a long
+way:
 
-That relationship is **statistically significant and practically negligible**. At this sample size a correlation this small is comfortably distinguishable from zero — it is not "no relationship" — but it explains **1.2% of the variance** in connection-tier proximity, and the two top-50 shortlists share no sites at all. The study publishes rho, the p-value, the confidence interval and the variance explained together, computed with `scipy.stats.spearmanr`, precisely so that neither half of that sentence can be quoted without the other.
+| Network basis | ρ on OSM farmland (n = 2,356) | ρ on parcel units (n = 10,684) |
+|---|---:|---:|
+| ≤22 kV distribution | 0.478 | 0.570 |
+| **33–66 kV connection tier** | **0.108** | **0.379** |
+| ≥110 kV transmission (OSM) | 0.040 | 0.045 |
+| ≥110 kV transmission (Transpower) | 0.043 | 0.026 |
+| LINZ Topo50, no voltage | 0.038 | 0.023 |
+
+The **ordering survives** — road proximity is most informative about the
+lowest-voltage network and least informative about the highest, on both
+populations. The **magnitude does not**: on real cadastral units a road proxy
+explains about **14%** of the variance in connection-tier distance, not 1%.
+
+So the sentence "explains about 1% of the variance" was true of the population I
+measured and not of the one a developer would actually screen. The OSM farmland
+set is dominated by large unimproved blocks on the spit and the peninsula, where
+roads and subtransmission have no common cause; cadastral units concentrate on
+the plains, where both follow the same settlement pattern. Fourteen per cent is
+still nowhere near a substitute for knowing where the 33–66 kV network is, but it
+is an order of magnitude more than I had been claiming, and the claim as
+published was wrong.
+
+The ordering below is the finding, and it is monotonic in voltage. A road centreline is a good stand-in for the low-voltage network — of course it is, the poles follow the road — and a steadily worse one as the voltage rises. Stated on the population a developer would actually screen:
+
+> **Cadastral units, n = 10,684.** Road distance against 33–66 kV distance: Spearman ρ = **0.379**, 95% CI **[0.363, 0.395]**, p < 10⁻³⁰⁰, explaining **14.3%** of the variance. Against ≤22 kV distribution: ρ = **0.570**. Against ≥110 kV transmission: ρ = **0.045**.
+
+So a road proxy carries real information about where the low-voltage network is, appreciably less about the tier a project connects at, and effectively none about transmission. Fourteen per cent is not nothing and it is not a substitute: it leaves 86% of the variation in connection-tier distance unexplained, which is the part that decides a project. The comparison publishes rho, the p-value, the confidence interval and the variance explained together, computed with `scipy.stats.spearmanr`, so that no half of that sentence can be quoted without the others.
 
 The 33–66 kV tier is also not a stand-in for transmission (ρ = 0.31 between those two), so there is no single "distance to the grid" number to put in a score.
 
-**If you take one sentence to an interview:** on real Canterbury geometry, distance to a road explains about 1% of the variance in distance to 33–66 kV (ρ = 0.11, real but negligible) against 22% for 11 kV (ρ = 0.47) — so a road proxy tells you where the low-voltage network is, not where you could connect.
+**If you take one sentence to an interview:** on real Canterbury cadastral units, distance to a road explains about **14%** of the variance in distance to the 33–66 kV network, and the figure falls monotonically with voltage — 0.57 for ≤22 kV, 0.38 for 33–66 kV, 0.045 for ≥110 kV — an ordering that holds on two independently built populations. A road proxy tells you where the low-voltage poles are, not where you could connect.
 
 ### The verify flag had to be re-cut too
 
 `S06_verify_grid` originally fired when *any* proxy distance exceeded 5 km, or the rank shift reached 3. Applied to these columns that rule flags **2,348 of 2,356 sites**, and the notebook recomputes it beside the new one — a flag that fires on everything carries no information. It now tests one thing: distance to the connection tier against that tier's own review distance, which is configured per tier in `config/assumptions.yml`. At 5 km from 33–66 kV it flags **372 of 2,356 (15.8%)**, which is a queue a person can actually work through.
 
 The absolute rank-shift trigger was dropped from the flag entirely. `rank_shift_review = 3` was chosen against eight demo fixtures; at n = 2,356 the median shift is 646, so the same constant fires on essentially every site. Rank thresholds expressed in ranks do not transfer across sample sizes. The shift stays published as a column, and it still selects the aerial review queue.
+
+### Three line layers, side by side
+
+`scripts/grid_basis_comparison.py` measures every candidate against three public
+answers to "where is the grid", and **never merges them**. Merging would destroy
+`grid_basis`, the column that records which question a distance answered.
+
+| Layer | Features | Length | Voltage attribute | Median distance | ρ with road |
+|---|---:|---:|---|---:|---:|
+| LINZ Topo50 powerlines | 347 | 1,889 km | **none** | 2,087 m | 0.038 (p = 0.06) |
+| OpenStreetMap, all | 6,738 | 8,695 km | yes | — | — |
+| Transpower ≥110 kV | 11 | 2,382 km | yes | 4,810 m | 0.043 |
+
+**I expected Topo50 to behave like an all-voltages layer and it does not.** The
+hypothesis going in was that an undifferentiated layer would track roads more
+closely than the 33–66 kV tier, since it would be dominated by the low-voltage
+network that follows the road. The opposite is true: Topo50's correlation with
+road distance is 0.038 on the OSM population — **not distinguishable from zero**
+at p = 0.06 — and 0.023 on the cadastral one.
+
+The reason is more useful than the hypothesis was. Topo50 maps **1,889 km of
+line where OpenStreetMap maps 8,695 km**, and its median distance and its road
+correlation both sit with the transmission tier rather than the distribution
+one. It is not an all-voltages layer that lacks a voltage field. It is
+effectively a transmission-and-subtransmission layer that does not say so. A
+screen built on it while calling the result "distance to the grid" is silently
+answering the transmission question — which is the wrong question for a project
+connecting at 33 or 66 kV, and harder to notice than a road proxy being wrong.
+
+**How complete is OpenStreetMap's transmission mapping?** Transpower's own
+layer is authoritative for the national grid, so it can be used as a yardstick:
+of the **1,571 km** of commissioned Transpower line in the study area, OSM has a
+transmission line within 250 m of **1,040 km — a recall of 66%**. A screen built
+on OSM alone is missing a third of the national grid by length here. That is
+measured rather than asserted, and it is why the two are published side by side.
+
+The three verify flags agree with each other on 59–81% of sites depending on the
+pair, which is another way of saying the same thing: the layer you choose is a
+modelling decision, not a detail.
+
+**Below 33 kV there is no authoritative open vector at all.** Orion and EA
+Networks publish no distribution geometry, so the ≤22 kV tier rests entirely on
+OpenStreetMap and cannot be validated the way the transmission tier just was.
 
 ### Aerial review: 11 of the 20 worst disagreements are not developable land
 
@@ -201,7 +273,9 @@ Scored against the labelled sites, keeping exclusion and flagging apart — the 
 
 First, B is a milder sample by construction: its median rank shift is 2,088 against A's 2,192, and only a quarter of it is bad land rather than half. Selecting on disagreement puts the most extreme cases in A, so a lower failure rate in B is what should happen. Anyone quoting 55% as the screen's false-positive rate is quoting the worst twenty sites in the region.
 
-Second, three of B's five failures are the same landforms the rules were built for — barrier spit, lagoon wetland, estuary margin — and the rules reach all three: one excluded on mapped water, two flagged for coastal review. **The other two are a failure mode that did not appear in A at all**: a rural settlement of lifestyle blocks with dwellings on every title, and a remnant paddock on a town's edge boxed in by a motorway interchange and a rail corridor. Both are tagged farmland in OpenStreetMap and both are flat, dry and inland, so no terrain or water rule can see them. They are land-use failures, and **LCDB would classify both as built-up** — which is the most concrete argument in this repository for finishing the LRIS run.
+Second, three of B's five failures are the same landforms the rules were built for — barrier spit, lagoon wetland, estuary margin — and the rules reach all three: one excluded on mapped water, two flagged for coastal review. **The other two are a failure mode that did not appear in A at all**: a rural settlement of lifestyle blocks with dwellings on every title, and a remnant paddock on a town's edge boxed in by a motorway interchange and a rail corridor. Both are tagged farmland in OpenStreetMap and both are flat, dry and inland, so no terrain or water rule can see them. They are land-use failures.
+
+> **Correction.** This paragraph used to say LCDB would classify both as built-up. It was written without checking, and it is wrong. Queried against the real layer, LCDB calls the lifestyle settlement *"Orchard, Vineyard or Other Perennial Crop"* (22.4 of its 24 ha) and the motorway-fringe block *"High Producing Exotic Grassland"* (48.2 of its 51 ha) — both **usable classes in this screen's own whitelist**. Land cover would have waved both through. What actually excludes them is the **cadastral** layer: the first is six parcels of 4–6 ha, the second is forty parcels with a largest of 10.3 ha, and neither has a single parcel over the 20 ha threshold. The argument for the LRIS run was right; the reason given for it was not.
 
 Third, B produced the rules' first false exclusion: an irrigated cropping block that S-09 threw out because a farm **irrigation pond** touches the polygon. `natural=water` does not distinguish a storage pond from a wetland, and "any intersection" is too blunt a test. The rule is left as it is and the failure is reported, because tuning it on the sample that exposed it is how the in-sample problem started.
 
@@ -215,9 +289,13 @@ The one site that trips nothing is instructive. It is a flat 312 ha barrier-spit
 
 - **OpenStreetMap is not LINZ.** Completeness varies by area and contributor; 994 mapped ways carry no voltage tag at all and sit in none of the tiers. The absence of a mapped line is not evidence that no line exists.
 - **A land-use polygon is not a parcel.** Eleven of twenty says so. Real screening needs LCDB or cadastral polygons.
+- **No open distribution network exists below 33 kV.** Orion and EA Networks
+  do not publish vector geometry, so the tier a small project would actually
+  connect to is OpenStreetMap-only and unvalidated. The transmission tier has
+  Transpower to check it against; the distribution tier has nothing.
 - **Still missing:** the LINZ Topo50 and LCDB versions of this same run. Nothing here should be quoted as a LINZ result. The code to produce it is in place — see [the real-data run](#the-real-data-run) — and what remains is two free portal accounts, which only the account holder can create.
 
-Attribution: © OpenStreetMap contributors, ODbL 1.0. Aerial imagery © LINZ and Environment Canterbury, CC BY 4.0.
+Attribution: © OpenStreetMap contributors, ODbL 1.0. Aerial imagery © LINZ and Environment Canterbury, CC BY 4.0. Transmission lines © Transpower New Zealand, CC BY 4.0. Topo50 powerlines and Primary Land Parcels © LINZ, CC BY 4.0.
 
 ## The real-data run
 
@@ -282,7 +360,7 @@ Three things about it are worth knowing before the first run:
 **Status of the live run.** It has been run end to end. 27,452 LCDB polygons in
 the study bbox became **1,166 candidate sites** with all four attributes (9 more
 had no LUC or solar value and went to `sites_unattributed`), and the screen
-returned **404 candidates and 762 quarantined**. Sampled LENZ values land at
+returned **404 candidates and 762 quarantined** on that basis. Sampled LENZ values land at
 1,325–1,441 kWh/m²/yr, which is the range the demo fixtures were written to.
 **S-05 now has real land behind it: 197 of the 404 candidates are LUC 1–3**, so
 the NPS-HPL flag is finally pointing at actual Canterbury paddocks rather than
@@ -294,6 +372,41 @@ With all ten rules in the library, slope removes a further **319** sites and
 mapped water **233**. That is the size of the hole: a third of what the screen
 was calling candidates was steep or wet.
 
+### On the parcel basis
+
+Cutting usable cover to parcel boundaries changes the population rather than
+filtering it. The same bounding box yields **10,684 candidate units**, and the
+screen returns **7,312 candidates against 3,372 quarantined**:
+
+| | Land-cover polygons | Parcel ∩ cover |
+|---|---:|---:|
+| Units assembled | 1,166 | 10,684 |
+| Candidates | 404 | 7,312 |
+| Median candidate area | 46.9 ha | **40.2 ha** |
+| Largest candidate | 2,524 ha | **625 ha** |
+| S-05 HPL flagged | 197 | 5,342 |
+
+The largest candidate is now *Lot 2 DP 361816* at 625 ha — an appellation and a
+title reference, which is what turns a polygon into something a reviewer can
+look up. Each unit carries its appellation, title and parcel intent.
+
+Two limitations have to be stated with it:
+
+- **Primary Parcels carry no ownership.** A farm held as several adjacent titles
+  is split into several units and each is measured separately, so a holding that
+  could host a project is understated. Merging adjacent parcels with the same
+  cover and LUC would be a reasonable sensitivity; it is not the headline and is
+  not done here.
+- **A parcel boundary is not a usable boundary.** Fences, centre-pivot circles,
+  shelterbelts, races and yards are all still inside these polygons. The area
+  rule measures title extent, not buildable extent.
+
+**The cheapest validation available** was to re-run sample B's two misses on
+this basis, and it paid: both vanish from the population entirely, because
+neither has a parent parcel over 20 ha. It also corrected the reason I had given
+for them — see the correction above. Land cover would have passed both; the
+cadastre is what catches them.
+
 The assembled layers and the screening outputs are **not committed**. LCDB and
 NZLRI come from the LRIS portal under its item terms, which this project does
 not redistribute; `data/derived/real/` and `outputs/real/` are gitignored, and
@@ -301,15 +414,19 @@ the run is reproducible from the two API keys.
 
 Three things the real run exposed that the demo could not:
 
-- **An LCDB polygon is not a parcel.** Land cover merges across ownership, so
-  the largest polygon the assembly produced was 230,000 ha and the largest
-  surviving candidate is 2,524 ha. The area and width rules pass those
-  trivially. A real shortlist needs LCDB intersected with cadastral parcels
-  (LINZ NZ Primary Parcels), which is the obvious next step and is not done.
+- **An LCDB polygon is not a parcel — so the screening unit is now the
+  intersection.** Land cover merges straight across ownership: the first
+  assembly produced a 230,000 ha polygon and a largest surviving candidate of
+  2,524 ha, neither of which is a thing anyone can buy or lease, and the area
+  and width rules passed both trivially. Candidate units are now
+  **LINZ NZ Primary Land Parcels ∩ usable LCDB cover**. Any unit of at least
+  20 ha needs a parent parcel of at least 20 ha, so the parcel layer is filtered
+  server-side by `calc_area`, which turns 308,928 parcels in the study bbox into
+  about 11,500 and loses nothing.
 - **LINZ Topo50 powerlines carry no voltage attribute** — the layer has
   `t50_fid` and `support_ty` and nothing else. So the voltage tiering has
   nothing to tier on and falls back to the whole layer, which `grid_basis`
-  records as `all_mapped_powerlines`. The ρ = 0.11 connection-tier finding is
+  records as `all_mapped_powerlines`. The connection-tier analysis is
   reproducible on OpenStreetMap, which tags voltage, and **not** on LINZ, which
   does not. That is worth knowing before quoting it as a LINZ result.
 - **S-08, S-09 and S-10 now run in `solar-screen`.** They used to live only in
@@ -431,6 +548,8 @@ Both are executed top to bottom by `tests/test_notebooks.py`, so they cannot qui
 - `data/aerial/` — the imagery each verdict was written from, one file per reviewed site across both samples
 - `data/derived/osm/site_terrain.csv` — per-site mean and p90 slope from Copernicus GLO-30
 - `outputs/osm/osm_grid_disagreement.png` — proxy scatter and the top-N agreement sweep
+- `outputs/osm/grid_basis_comparison.json` — the three line layers side by side, with the OSM transmission recall against Transpower
+- `outputs/cadastral_grid_basis_comparison.json` — the same comparison on the cadastral population; aggregate statistics only, and not CI-reproducible because its input is LRIS-derived
 
 ## Demo versus real data
 
@@ -442,7 +561,7 @@ The market series are different: both the ISL0661 half-hourly final prices and t
 
 ## Validation
 
-One hundred and forty-three automated tests cover shared configuration and both CLIs, CRS/schema/geometry gates, exclusion and flag rules, both width methods, candidate-only ranking, spatial-indexed nearest distance, configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, strict market-value input validity, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry, seasonal/intraday decomposition, the metered load control, sensitivities, OSM voltage tiers, terrain and water rules, aerial-review evidence, the real-data assembly path against fixtures — publisher column spellings, multipart splitting, geometry-derived identifiers, the refusal to run without an API key, on a placeholder key or on an implausibly short one, and portal errors that name the status without echoing the key, that every third-party import is declared in `pyproject.toml` including the two that are imported lazily inside functions, that `environment.yml` matches — the rule register as a contract against the library that implements it — every registered rule now has to have a column in evaluate_sites, which is what caught S-08 to S-10 living only in a script — the single S-06 implementation and its refusal to flag on rank shift, the held-out sample B scorecard, and top-to-bottom notebook execution.
+One hundred and eighty-six automated tests cover shared configuration and both CLIs, CRS/schema/geometry gates, exclusion and flag rules, both width methods, candidate-only ranking, spatial-indexed nearest distance, configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, strict market-value input validity, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry, seasonal/intraday decomposition, the metered load control, sensitivities, OSM voltage tiers, terrain and water rules, aerial-review evidence, the real-data assembly path against fixtures — publisher column spellings, multipart splitting, geometry-derived identifiers, the refusal to run without an API key, on a placeholder key or on an implausibly short one, and portal errors that name the status without echoing the key, that every third-party import is declared in `pyproject.toml` including the two that are imported lazily inside functions, that `environment.yml` matches — the rule register as a contract against the library that implements it — every registered rule now has to have a column in evaluate_sites, which is what caught S-08 to S-10 living only in a script — the single S-06 implementation and its refusal to flag on rank shift, the held-out sample B scorecard, the side-by-side grid bases and that the monotonic-in-voltage ordering survives a rerun, the measured OpenStreetMap transmission recall against Transpower, that no superseded claim survives outside the correction that supersedes it — in the README, the dashboard, the notebooks or the scripts — and that the headline figures match the published statistics file, and top-to-bottom notebook execution.
 
 GitHub Actions installs the committed lock, reruns both complete pipelines and compares the full tracked output-file manifest. It strictly diffs CSV/JSON; because GeoPackage and PNG bytes vary across operating systems, `scripts/verify_reproduced_outputs.py` compares GeoPackages by fields and geometry and applies a bounded pixel-difference check to every generated figure. Binary outputs are therefore covered without requiring byte-identical cross-platform files.
 
