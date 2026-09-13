@@ -18,7 +18,11 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from nz_solar_siting.capture import yearly_capture_rates
-from nz_solar_siting.config import load_project_config, verify_data_checksums
+from nz_solar_siting.config import (
+    load_project_config,
+    resolve_output_directory,
+    verify_data_checksums,
+)
 from nz_solar_siting.demo_data import build_demo_layers
 from nz_solar_siting.screen import run_screening
 from nz_solar_siting.site_cards import write_site_cards
@@ -110,9 +114,7 @@ def main() -> None:
     assumptions = project_config.assumptions
     solar = assumptions["solar"]
     market = assumptions["market"]
-    output = (ROOT / args.output).resolve()
-    if output == ROOT or not output.is_relative_to(ROOT):
-        raise ValueError("--output must be a directory inside the repository")
+    output = resolve_output_directory(args.output, ROOT)
     if output.exists():
         shutil.rmtree(output)
     figures = output / "figures"

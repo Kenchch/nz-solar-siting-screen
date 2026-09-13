@@ -49,9 +49,33 @@ def test_trading_periods_are_consecutive_in_utc_across_dst():
         assert (elapsed == pd.Timedelta(minutes=30)).all()
 
 
-def test_invalid_trading_period_is_rejected():
-    with pytest.raises(ValueError, match="1 to 50"):
+def test_a_period_beyond_the_day_is_rejected_against_that_day_length():
+    """46, 48 or 50, depending on the day - not a blanket 1 to 50.
+
+    A blanket range let period 49 through on an ordinary day, where it converts
+    to the next day's midnight and collides with that day's period 1 - or, on
+    the last day in a file, silently invents an instant that nothing catches.
+    """
+    with pytest.raises(ValueError, match="does not exist on 2023-01-01"):
         trading_period_timestamps(pd.Series(["2023-01-01"]), pd.Series([51]))
+    with pytest.raises(ValueError, match="which has 48 half-hour periods"):
+        trading_period_timestamps(pd.Series(["2023-07-12"]), pd.Series([49]))
+    with pytest.raises(ValueError, match="which has 46 half-hour periods"):
+        trading_period_timestamps(pd.Series(["2023-09-24"]), pd.Series([47]))
+    # The long day really does have 50, and the short day really does have 46.
+    assert len(trading_period_timestamps(pd.Series(["2023-04-02"]), pd.Series([50]))) == 1
+    assert len(trading_period_timestamps(pd.Series(["2023-09-24"]), pd.Series([46]))) == 1
+
+
+def test_a_fractional_trading_period_is_rejected_not_truncated():
+    """astype(int) turned 1.9 into period 1 without a word."""
+    with pytest.raises(ValueError, match="whole numbers"):
+        trading_period_timestamps(pd.Series(["2023-07-12"]), pd.Series([1.9]))
+
+
+def test_a_period_below_one_is_rejected():
+    with pytest.raises(ValueError, match="1 or greater"):
+        trading_period_timestamps(pd.Series(["2023-07-12"]), pd.Series([0]))
 
 
 def test_solar_shape_uses_unique_utc_instants():

@@ -80,3 +80,21 @@ def test_both_populations_stay_visible_and_labelled():
     assert str(OSM_BASIS["sites"]) in README.replace(",", "")
     assert f"{CADASTRAL['sites']:,}" in README
     assert "ordering" in _correction_block()
+
+
+def test_the_tilt_correction_size_matches_the_sensitivity_table():
+    """A number quoted in prose has to come from the CSV it describes.
+
+    This one did not: the worst-year effect of the horizontal-plane error was
+    published as 7.1 points when the table says 10.7.
+    """
+    import pandas as pd
+
+    tilt = pd.read_csv(ROOT / "outputs" / "demo" / "tilt_sensitivity.csv").set_index("tilt_deg")
+    worst = (tilt.loc[25.0, "minimum_capture_rate"] - tilt.loc[0.0, "minimum_capture_rate"]) * 100
+    mean = (tilt.loc[25.0, "mean_capture_rate"] - tilt.loc[0.0, "mean_capture_rate"]) * 100
+    line = next(l for l in README.splitlines() if "on the worst year" in l)
+    assert f"**{worst:.1f} percentage points**" in line, line
+    assert f"{mean:.1f} points on the period mean" in line, line
+    for tilt_deg in (0.0, 25.0):
+        assert f"{tilt.loc[tilt_deg, 'minimum_capture_rate'] * 100:.1f}%" in line

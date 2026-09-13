@@ -30,10 +30,32 @@ def trading_period_timestamps(
         labels.loc[~iso], format="mixed", dayfirst=True, errors="raise"
     )
     dates = dates.dt.normalize()
-    periods = pd.to_numeric(trading_periods, errors="raise").astype(int)
-    if (periods < 1).any() or (periods > 50).any():
-        raise ValueError("trading periods must be integers from 1 to 50")
+    numeric = pd.to_numeric(trading_periods, errors="raise")
+    # astype(int) truncates, so 1.9 would silently become period 1.
+    if not np.isclose(numeric, numeric.round()).all():
+        offending = numeric[~np.isclose(numeric, numeric.round())].iloc[0]
+        raise ValueError(f"trading periods must be whole numbers; found {offending!r}")
+    periods = numeric.round().astype(int)
+    if (periods < 1).any():
+        raise ValueError("trading periods must be 1 or greater")
+
     local_midnight = dates.dt.tz_localize(timezone)
+    # How many half hours that local day actually has: 48 normally, 46 when
+    # daylight saving starts and 50 when it ends. A period beyond the day's own
+    # length is not a real trading period, and converting it anyway lands on the
+    # next day - where it collides with that day's first period, or silently
+    # invents an instant when the next day is not in the file.
+    next_midnight = (dates + pd.Timedelta(days=1)).dt.tz_localize(timezone)
+    periods_in_day = (
+        (next_midnight - local_midnight) // pd.Timedelta(minutes=30)
+    ).astype(int)
+    too_long = periods > periods_in_day
+    if too_long.any():
+        index = too_long.idxmax()
+        raise ValueError(
+            f"trading period {periods[index]} does not exist on {labels[index]}, "
+            f"which has {periods_in_day[index]} half-hour periods"
+        )
     return local_midnight.dt.tz_convert("UTC") + pd.to_timedelta((periods - 1) * 30, unit="min")
 
 

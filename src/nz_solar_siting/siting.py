@@ -117,8 +117,21 @@ def evaluate_sites(
         raise ValueError("sites.site_id contains missing or blank values")
     if sites["site_id"].astype(str).duplicated().any():
         raise ValueError("sites.site_id must be unique")
-    if not sites.geom_type.isin(["Polygon", "MultiPolygon"]).all():
-        raise ValueError("sites geometry must contain only Polygon or MultiPolygon features")
+    # S-01 and S-02 are about one contiguous block of land. A MultiPolygon's
+    # area is the sum of its parts, so two 10 ha squares five kilometres apart
+    # would pass a 20 ha rule and a width test neither part can satisfy. The
+    # assembly step already explodes multiparts, so this refuses rather than
+    # silently measuring the wrong thing.
+    multipart = sites.geom_type.eq("MultiPolygon")
+    if multipart.any():
+        example = sites.loc[multipart, "site_id"].iloc[0]
+        raise ValueError(
+            f"sites contains {int(multipart.sum())} MultiPolygon features, first {example!r}. "
+            "Area and width are contiguity rules; explode multiparts before screening "
+            "(GeoDataFrame.explode(index_parts=False))."
+        )
+    if not sites.geom_type.eq("Polygon").all():
+        raise ValueError("sites geometry must contain only Polygon features")
     solar = pd.to_numeric(sites["solar_kwh_m2"], errors="coerce")
     luc = pd.to_numeric(sites["luc_class"], errors="coerce")
     if not np.isfinite(solar).all():
@@ -127,7 +140,10 @@ def evaluate_sites(
         raise ValueError("sites.luc_class must contain only numeric values")
 
     out = sites.copy()
-    out["area_ha"] = out.geometry.map(area_hectares).round(2)
+    # Round for publication, compare on the measurement: rounding first lets
+    # 19.995 ha pass a 20 ha rule.
+    exact_area_ha = out.geometry.map(area_hectares)
+    out["area_ha"] = exact_area_ha.round(2)
     out["width_2ap_m"] = out.geometry.map(mean_width_area_perimeter).round(1)
     out["width_core_pass"] = out.geometry.map(
         lambda geometry: has_width_core(geometry, cfg.minimum_average_width_m)
@@ -135,7 +151,7 @@ def evaluate_sites(
     out["width_methods_disagree"] = (
         out["width_2ap_m"] >= cfg.minimum_average_width_m
     ) != out["width_core_pass"]
-    out["S01_pass"] = out["area_ha"] >= cfg.minimum_area_ha
+    out["S01_pass"] = exact_area_ha >= cfg.minimum_area_ha
     out["S02_pass"] = out["width_core_pass"]
     out["S03_pass"] = out["lcdb_class"].isin(cfg.usable_lcdb_classes)
     # A spatial-index join rather than a union and a row loop: the union of a
@@ -155,15 +171,25 @@ def evaluate_sites(
     # S-08 slope. The value is precomputed into a per-site table, so a missing
     # row is a gap in the inputs rather than a property of the land: it must not
     # read as "this site is flat".
+    supplied_column = "mean_slope_deg" in sites.columns
     if terrain is not None:
         if "site_id" not in terrain.columns or "mean_slope_deg" not in terrain.columns:
             raise ValueError("terrain must carry site_id and mean_slope_deg")
+        if supplied_column:
+            raise ValueError(
+                "mean_slope_deg is present on sites and a terrain table was also given; "
+                "pass one or the other so it is unambiguous which slope was screened"
+            )
         slope = pd.to_numeric(
             out["site_id"].map(
                 terrain.drop_duplicates("site_id").set_index("site_id")["mean_slope_deg"]
             ),
             errors="coerce",
         )
+    elif supplied_column:
+        # A caller who has already joined slope on must not have it silently
+        # overwritten with NaN and then read S-08 as inapplicable.
+        slope = pd.to_numeric(sites["mean_slope_deg"], errors="coerce")
     else:
         slope = pd.Series(np.nan, index=out.index, dtype=float)
     out["mean_slope_deg"] = slope.round(3)
@@ -217,7 +243,7 @@ def evaluate_sites(
 
     out["rules_not_applied"] = ";".join(
         rule for rule, supplied in (
-            ("S-08", terrain is not None),
+            ("S-08", terrain is not None or supplied_column),
             ("S-09", water is not None),
             ("S-10", coastline is not None),
         ) if not supplied

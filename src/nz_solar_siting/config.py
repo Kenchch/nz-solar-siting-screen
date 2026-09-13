@@ -78,3 +78,21 @@ def verify_data_checksums(data_root: str | Path, relative_paths: tuple[str, ...]
         actual = hashlib.sha256(content).hexdigest()
         if expected.get(relative) != actual:
             raise RuntimeError(f"committed input checksum mismatch: data/{relative}")
+
+def resolve_output_directory(candidate: str | Path, root: str | Path) -> Path:
+    """Resolve an output directory that is safe to delete and recreate.
+
+    Callers delete this directory before writing it. The earlier guard only
+    required the path to be inside the repository and not its root, so
+    ``--output src`` reached the delete branch. A directory that gets removed on
+    every run has to be one the project owns, which means under ``outputs/``.
+    """
+    root_path = Path(root).resolve()
+    output = (root_path / candidate).resolve()
+    outputs_root = (root_path / "outputs").resolve()
+    if output == outputs_root or not output.is_relative_to(outputs_root):
+        raise ValueError(
+            f"output directory must be inside outputs/, not {str(candidate)!r}: "
+            "this path is deleted and rewritten on every run"
+        )
+    return output
