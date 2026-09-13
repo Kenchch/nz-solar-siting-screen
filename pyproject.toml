@@ -19,6 +19,13 @@ dependencies = [
   "pyogrio>=0.10",
   "pyproj>=3.7",
   "PyYAML>=6.0",
+  # Spearman rho with its p-value and Fisher interval, so the connection-tier
+  # correlation is reported as significant-and-negligible rather than hand-rolled.
+  "scipy>=1.13",
+  # Sampling the Copernicus DEM and the LENZ solar grid per polygon. Imported
+  # lazily inside the two scripts that need it, which is why an undeclared
+  # dependency survived here until a real run went looking for it.
+  "rasterio>=1.3",
   "shapely>=2.0",
 ]
 
