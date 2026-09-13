@@ -1,6 +1,6 @@
 {
   "source": "OpenStreetMap contributors, ODbL; Canterbury plains extract",
-  "scope": "S-01 area and S-02 width only; land cover, LUC and solar resource still require portal-controlled datasets",
+  "scope": "S-01 area and S-02 width define the population; S-08 slope and S-09 water exclude, S-10 coastal flags. Land cover, LUC class and solar resource still require portal-controlled datasets",
   "crs": "EPSG:2193",
   "farmland_polygons_downloaded": 9102,
   "sites_passing_area_and_width": 2356,
@@ -269,14 +269,20 @@
     "false_positive_rate": 0.55,
     "selection": "the largest connection-tier-versus-road rank disagreements; selected on disagreement, so this rate describes the road proxy's worst cases and not the candidate population",
     "in_sample_rule_check": {
-      "caught_by_slope": 4,
-      "caught_by_water": 4,
-      "caught_by_coastal_flag": 7,
-      "caught_by_any": 10,
-      "missed": [
+      "excluded_by_slope": 4,
+      "excluded_by_water": 4,
+      "excluded_total": 8,
+      "flagged_only_by_coast": 2,
+      "neither_excluded_nor_flagged": [
         "OSM-1106896738"
       ],
-      "developable_sites_wrongly_caught": 0
+      "developable_sites_wrongly_excluded": 0,
+      "developable_sites_flagged_only": 0
+    },
+    "second_pass": {
+      "confirmed": 19,
+      "corrected": 1,
+      "author_confirmed": 0
     },
     "log": "data/aerial_review_log.csv"
   }

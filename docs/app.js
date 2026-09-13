@@ -119,8 +119,9 @@ function renderAerial(study) {
   const check = review.in_sample_rule_check || {};
   const terrain = study.terrain_water;
   const rulesHost = document.querySelector("#aerial-rules");
-  if (rulesHost && check.caught_by_any !== undefined) {
-    rulesHost.textContent = `The three rules added afterwards — mean slope from a free DEM, mapped water, and a coastal proximity flag — catch ${check.caught_by_any} of those ${bad}, and wrongly catch ${check.developable_sites_wrongly_caught} of the ${good} genuine sites.`;
+  if (rulesHost && check.excluded_total !== undefined) {
+    const missed = check.neither_excluded_nor_flagged.length;
+    rulesHost.textContent = `The rules added afterwards exclude ${check.excluded_total} of those ${bad} outright — ${check.excluded_by_slope} on slope, ${check.excluded_by_water} on mapped water — flag ${check.flagged_only_by_coast} more for coastal review without excluding them, and miss ${missed}. No genuine site is excluded.`;
   }
   const populationHost = document.querySelector("#aerial-population");
   if (populationHost && terrain) {
@@ -129,7 +130,8 @@ function renderAerial(study) {
   }
   const width = 760, height = 330, top = 62, left = 40;
   const barWidth = (width - left * 2) * (bad / review.queued);
-  const caughtWidth = (width - left * 2) * ((check.caught_by_any || 0) / review.queued);
+  const excludedWidth = (width - left * 2) * ((check.excluded_total || 0) / review.queued);
+  const flaggedWidth = (width - left * 2) * (((check.excluded_total || 0) + (check.flagged_only_by_coast || 0)) / review.queued);
   panel.innerHTML = `<svg viewBox="0 0 ${width} ${height}" aria-hidden="true">
     <text class="chart-label" x="${left}" y="26">AERIAL REVIEW OF THE ${review.queued} LARGEST DISAGREEMENTS</text>
     <rect x="${left}" y="${top}" width="${width - left * 2}" height="50" fill="#12343b"/>
@@ -137,8 +139,9 @@ function renderAerial(study) {
     <text x="${left + 14}" y="${top + 32}" fill="#071113" font-size="21" font-weight="700">${bad} not developable</text>
     <text x="${width - left - 14}" y="${top + 32}" fill="#a8dbe5" font-size="17" text-anchor="end">${good} genuine</text>
     <rect x="${left}" y="${top + 62}" width="${width - left * 2}" height="22" fill="#12343b"/>
-    <rect x="${left}" y="${top + 62}" width="${caughtWidth}" height="22" fill="#5bd6b0"/>
-    <text class="chart-label" x="${left}" y="${top + 104}">${check.caught_by_any} OF THOSE ${bad} ARE NOW CAUGHT BY S-08 SLOPE, S-09 WATER OR S-10 COAST</text>
+    <rect x="${left}" y="${top + 62}" width="${flaggedWidth}" height="22" fill="#2d6a9f"/>
+    <rect x="${left}" y="${top + 62}" width="${excludedWidth}" height="22" fill="#5bd6b0"/>
+    <text class="chart-label" x="${left}" y="${top + 104}">${check.excluded_total} OF THOSE ${bad} EXCLUDED BY S-08 SLOPE OR S-09 WATER · ${check.flagged_only_by_coast} FLAGGED ONLY BY S-10</text>
     <text class="chart-value" x="${left}" y="${top + 162}" font-size="42">${(review.false_positive_rate * 100).toFixed(0)}%</text>
     <text class="chart-label" x="${left}" y="${top + 188}">OF THE ROAD PROXY'S WORST DISAGREEMENTS — A DISAGREEMENT-SELECTED SAMPLE,</text>
     <text class="chart-label" x="${left}" y="${top + 208}">NOT THE CANDIDATE POPULATION</text>
