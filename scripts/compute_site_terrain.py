@@ -6,6 +6,12 @@ implemented". This closes that gap with the cheapest open input available:
 Copernicus GLO-30 is free, needs no account, and is served as cloud-optimised
 GeoTIFF from a public bucket.
 
+It works on any screened polygon layer with a ``site_id`` column, so the real
+LCDB run gets the same terrain rules as the OpenStreetMap study: pass ``--sites``
+the GeoPackage that ``scripts/build_real_sites.py`` writes. With no ``--sites``
+it defaults to the committed OSM extract and applies the area and width rules
+itself.
+
 The DEM tiles themselves are large and are not committed. What is committed is
 the derived per-site table: mean and 90th-percentile slope in degrees, and the
 sample count, for every OSM polygon that passes the area and width rules. That
@@ -38,6 +44,7 @@ from rasterio.features import geometry_mask
 from rasterio.windows import from_bounds
 
 from nz_solar_siting.geometry import area_hectares, has_width_core
+from nz_solar_siting.load import read_layer
 from nz_solar_siting.osm_layers import read_osm_layer
 from nz_solar_siting.siting import SitingConfig
 
@@ -85,6 +92,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cache", default=None, help="Directory for downloaded DEM tiles")
     parser.add_argument("--output", default="data/derived/osm/site_terrain.csv")
+    parser.add_argument(
+        "--sites",
+        help=(
+            "Polygon layer with a site_id column, e.g. the GeoPackage that "
+            "scripts/build_real_sites.py writes. Defaults to the committed OSM "
+            "farmland extract, which is then filtered by the area and width rules."
+        ),
+    )
+    parser.add_argument("--layer", help="Layer name inside --sites, when the file holds several")
     arguments = parser.parse_args()
     cache = Path(arguments.cache) if arguments.cache else ROOT / "data" / "raw" / "copernicus_dem"
     cache.mkdir(parents=True, exist_ok=True)
@@ -95,14 +111,22 @@ def main() -> None:
         minimum_average_width_m=float(siting["minimum_average_width_m"]),
     )
 
-    farmland = read_osm_layer("farmland", ROOT / "data" / "derived" / "osm")
-    sites = farmland.copy()
-    sites["area_ha"] = sites.geometry.map(area_hectares)
-    sites = sites.loc[sites["area_ha"] >= config.minimum_area_ha]
-    sites = sites.loc[
-        sites.geometry.map(lambda g: has_width_core(g, config.minimum_average_width_m))
-    ].copy()
-    sites["site_id"] = "OSM-" + sites["osm_id"].astype("int64").astype(str)
+    if arguments.sites:
+        # A layer that has already been screened carries its own site_id and has
+        # had the area and width rules applied; do not re-filter it.
+        sites = read_layer(arguments.sites, ("site_id",), "sites", layer=arguments.layer)
+        sites = sites[["site_id", "geometry"]].copy()
+    else:
+        farmland = read_osm_layer("farmland", ROOT / "data" / "derived" / "osm")
+        sites = farmland.copy()
+        sites["area_ha"] = sites.geometry.map(area_hectares)
+        sites = sites.loc[sites["area_ha"] >= config.minimum_area_ha]
+        sites = sites.loc[
+            sites.geometry.map(lambda g: has_width_core(g, config.minimum_average_width_m))
+        ].copy()
+        sites["site_id"] = "OSM-" + sites["osm_id"].astype("int64").astype(str)
+    if sites["site_id"].duplicated().any():
+        raise ValueError("site_id must be unique; the terrain table is keyed on it")
     sites = sites.sort_values("site_id").reset_index(drop=True)
     geographic = sites.to_crs("EPSG:4326")
     print(f"{len(sites)} sites passing area and width", flush=True)
