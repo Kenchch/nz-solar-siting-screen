@@ -56,6 +56,44 @@ def capture_rate(prices: pd.Series, output: pd.Series) -> float:
     return float(np.sum(price * generation) / (np.sum(generation) * np.mean(price)))
 
 
+def decompose_capture_rate(
+    prices: pd.Series, output: pd.Series, day: pd.Series
+) -> tuple[float, float]:
+    """Split a capture rate into an exact seasonal term and an intraday term.
+
+    Writing each period's price as a daily mean plus a within-day residual,
+    ``sum(p*g)`` separates into ``sum_d n_d * P_d * G_d`` and
+    ``sum_d n_d * cov_d``, where ``P_d``/``G_d`` are that day's mean price and
+    mean output and ``cov_d`` is the within-day price/output covariance. Both
+    terms share the capture-rate denominator, so
+
+        capture_rate == seasonal_term + intraday_term
+
+    holds exactly. The seasonal term is what a plant with the same *daily*
+    energy but a flat within-day profile would capture: it answers "is output
+    in the expensive months?". The intraday term is what the shape of the day
+    adds or subtracts: it answers "is output in the expensive hours?". Only the
+    second is midday price cannibalisation.
+    """
+    frame = pd.DataFrame(
+        {
+            "price": pd.to_numeric(prices, errors="coerce").astype(float).to_numpy(),
+            "output": pd.to_numeric(output, errors="coerce").astype(float).to_numpy(),
+            "day": np.asarray(day),
+        }
+    )
+    frame = frame[np.isfinite(frame["price"]) & np.isfinite(frame["output"])]
+    if frame.empty or frame["output"].sum() <= 0 or abs(frame["price"].mean()) < 1e-12:
+        raise ValueError("decomposition requires finite prices, positive output and non-zero mean price")
+    daily = frame.groupby("day", sort=False).agg(
+        periods=("price", "size"), mean_price=("price", "mean"), mean_output=("output", "mean")
+    )
+    denominator = float(frame["output"].sum() * frame["price"].mean())
+    seasonal = float((daily["periods"] * daily["mean_price"] * daily["mean_output"]).sum() / denominator)
+    total = float((frame["price"] * frame["output"]).sum() / denominator)
+    return seasonal, total - seasonal
+
+
 def yearly_capture_rates(
     prices: pd.DataFrame,
     timestamp_col: str = "timestamp_utc",
@@ -67,6 +105,10 @@ def yearly_capture_rates(
     timestep_minutes: int = 30,
     longitude_deg: float = 172.45,
     solar_time_basis: str = "apparent_solar",
+    tilt_deg: float = 25.0,
+    load_shape: pd.DataFrame | None = None,
+    load_timestamp_col: str = "timestamp_utc",
+    load_col: str = "load_kwh",
 ) -> pd.DataFrame:
     data = prices.copy()
     data[timestamp_col] = _as_utc(data[timestamp_col])
@@ -74,7 +116,17 @@ def yearly_capture_rates(
         duplicate = data.loc[data[timestamp_col].duplicated(False), timestamp_col].iloc[0]
         raise CaptureAlignmentError(f"duplicate price timestamp: {duplicate}")
     data[price_col] = pd.to_numeric(data[price_col], errors="coerce")
-    local_year = data[timestamp_col].dt.tz_convert(timezone).dt.year
+    local = data[timestamp_col].dt.tz_convert(timezone)
+    local_year = local.dt.year
+    data["_local_date"] = local.dt.date
+    load = None
+    if load_shape is not None:
+        load = load_shape[[load_timestamp_col, load_col]].copy()
+        load[load_timestamp_col] = _as_utc(load[load_timestamp_col])
+        load[load_col] = pd.to_numeric(load[load_col], errors="coerce")
+        if load[load_timestamp_col].duplicated().any():
+            raise CaptureAlignmentError("duplicate load timestamp in the control shape")
+        load = load.rename(columns={load_timestamp_col: "timestamp_utc", load_col: "load_control"})
     records: list[dict[str, float | int]] = []
     for year, group in data.groupby(local_year):
         shape = half_hour_shape(
@@ -83,6 +135,7 @@ def yearly_capture_rates(
             timestep_minutes=timestep_minutes, timezone=timezone,
             shaping_exponent=shaping_exponent,
             longitude_deg=longitude_deg, solar_time_basis=solar_time_basis,
+            tilt_deg=tilt_deg,
         )
         group = group.sort_values(timestamp_col).copy()
         try:
@@ -97,12 +150,33 @@ def yearly_capture_rates(
         unmatched = int(merged["output_pu"].isna().sum())
         if unmatched:
             raise CaptureAlignmentError(f"{year}: {unmatched} price rows have no production-shape match")
-        records.append({
+        seasonal, intraday = decompose_capture_rate(
+            merged[price_col], merged["output_pu"], merged["_local_date"]
+        )
+        record: dict[str, float | int] = {
             "year": int(year), "observations": int(len(merged)),
             "mean_price_nzd_mwh": float(merged[price_col].mean()),
             "solar_capture_rate": capture_rate(merged[price_col], merged["output_pu"]),
+            "seasonal_capture_rate": seasonal,
+            "intraday_capture_points": intraday,
             "flat_capture_rate": capture_rate(merged[price_col], pd.Series(1.0, index=merged.index)),
-        })
+        }
+        if load is not None:
+            with_load = merged.merge(load, on="timestamp_utc", how="left", validate="one_to_one")
+            missing_load = int(with_load["load_control"].isna().sum())
+            if missing_load:
+                raise CaptureAlignmentError(
+                    f"{year}: {missing_load} price rows have no load-control match"
+                )
+            load_seasonal, load_intraday = decompose_capture_rate(
+                with_load[price_col], with_load["load_control"], with_load["_local_date"]
+            )
+            record["load_capture_rate"] = capture_rate(
+                with_load[price_col], with_load["load_control"]
+            )
+            record["load_seasonal_capture_rate"] = load_seasonal
+            record["load_intraday_capture_points"] = load_intraday
+        records.append(record)
     result = pd.DataFrame(records)
     accounted_rows = int(result["observations"].sum()) if not result.empty else 0
     if accounted_rows != len(data):

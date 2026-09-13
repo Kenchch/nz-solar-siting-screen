@@ -19,21 +19,90 @@ function renderCandidates(sortKey = "screen_score") {
 
 function renderChart(rates) {
   const width = 760, height = 330, left = 58, right = 24, top = 30, bottom = 44;
-  const values = rates.flatMap(d => [d.solar_capture_rate * 100, d.flat_capture_rate * 100]);
+  const hasLoad = rates.every(d => typeof d.load_capture_rate === "number");
+  const values = rates.flatMap(d => [d.solar_capture_rate * 100, d.flat_capture_rate * 100]
+    .concat(hasLoad ? [d.load_capture_rate * 100] : []));
   const min = Math.floor((Math.min(...values) - 4) / 5) * 5;
   const max = Math.ceil((Math.max(...values) + 4) / 5) * 5;
   const x = i => left + i * (width - left - right) / Math.max(1, rates.length - 1);
   const y = v => top + (max - v) * (height - top - bottom) / (max - min);
   const solarPoints = rates.map((d, i) => `${x(i)},${y(d.solar_capture_rate * 100)}`).join(" ");
   const flatPoints = rates.map((d, i) => `${x(i)},${y(d.flat_capture_rate * 100)}`).join(" ");
+  const loadPoints = hasLoad ? rates.map((d, i) => `${x(i)},${y(d.load_capture_rate * 100)}`).join(" ") : "";
   const ticks = [min, (min + max) / 2, max];
   document.querySelector("#capture-chart").innerHTML = `<svg viewBox="0 0 ${width} ${height}" aria-hidden="true">
     ${ticks.map(t => `<line x1="${left}" y1="${y(t)}" x2="${width-right}" y2="${y(t)}" stroke="#254147"/><text class="chart-label" x="${left-10}" y="${y(t)+4}" text-anchor="end">${t.toFixed(0)}%</text>`).join("")}
     <polyline points="${flatPoints}" fill="none" stroke="#a8dbe5" stroke-width="2" stroke-dasharray="7 6"/>
+    ${hasLoad ? `<polyline points="${loadPoints}" fill="none" stroke="#f19ad6" stroke-width="2.5"/>` : ""}
     <polyline points="${solarPoints}" fill="none" stroke="#f7c948" stroke-width="4"/>
     ${rates.map((d, i) => `<circle cx="${x(i)}" cy="${y(d.solar_capture_rate*100)}" r="5" fill="#071113" stroke="#f7c948" stroke-width="3"/><text class="chart-label" x="${x(i)}" y="${height-16}" text-anchor="middle">${d.year}</text><text class="chart-value" x="${x(i)}" y="${y(d.solar_capture_rate*100)-12}" text-anchor="middle">${(d.solar_capture_rate*100).toFixed(0)}%</text>`).join("")}
     <text class="chart-label" x="${left}" y="14">CAPTURE RATE · OUTPUT-WEIGHTED PRICE / MEAN PRICE</text>
+    <text class="chart-label" x="${width - right}" y="14" text-anchor="end">SOLAR SHAPE${hasLoad ? " · ISL0661 METERED LOAD" : ""} · FLAT CONTROL</text>
   </svg>`;
+}
+
+function renderDecomposition(rates) {
+  const host = document.querySelector("#decomposition-chart");
+  if (!host || !rates.every(d => typeof d.seasonal_capture_rate === "number")) return;
+  const width = 760, height = 330, left = 58, right = 24, top = 30, bottom = 44;
+  const seasonal = rates.map(d => (d.seasonal_capture_rate - 1) * 100);
+  const intraday = rates.map(d => d.intraday_capture_points * 100);
+  const limit = Math.ceil(Math.max(4, ...seasonal.concat(intraday).map(Math.abs)) / 5) * 5;
+  const band = (width - left - right) / rates.length;
+  const y = v => top + (limit - v) * (height - top - bottom) / (2 * limit);
+  const bar = (index, value, offset, fill) => {
+    const barWidth = band * 0.3;
+    const x = left + index * band + band / 2 + offset * barWidth * 0.55 - barWidth / 2;
+    const zero = y(0), end = y(value);
+    return `<rect x="${x}" y="${Math.min(zero, end)}" width="${barWidth}" height="${Math.abs(end - zero)}" fill="${fill}"/>`;
+  };
+  host.innerHTML = `<svg viewBox="0 0 ${width} ${height}" aria-hidden="true">
+    ${[-limit, 0, limit].map(tick => `<line x1="${left}" y1="${y(tick)}" x2="${width - right}" y2="${y(tick)}" stroke="#254147"/><text class="chart-label" x="${left - 10}" y="${y(tick) + 4}" text-anchor="end">${tick > 0 ? "+" : ""}${tick}</text>`).join("")}
+    ${rates.map((d, i) => bar(i, seasonal[i], -1, "#5bd6b0") + bar(i, intraday[i], 1, "#f7c948")
+      + `<text class="chart-label" x="${left + i * band + band / 2}" y="${height - 16}" text-anchor="middle">${d.year}</text>`).join("")}
+    <text class="chart-label" x="${left}" y="14">PERCENTAGE POINTS · SEASONAL (GREEN) VS INTRADAY (YELLOW)</text>
+  </svg>`;
+}
+
+function renderOsmStudy(study) {
+  const host = document.querySelector("#osm-rows");
+  const scope = document.querySelector("#osm-scope");
+  if (!host) return;
+  if (!study) {
+    host.innerHTML = `<tr><td colspan="4">Run scripts/osm_grid_study.py to populate this table.</td></tr>`;
+    return;
+  }
+  if (scope) {
+    scope.textContent = `${study.sites_passing_area_and_width.toLocaleString("en-NZ")} OSM farmland polygons passing area and width`;
+  }
+  const label = pair => pair.replaceAll("_m", "").replace("|", " vs ");
+  host.innerHTML = Object.keys(study.rank_correlation).map(pair => {
+    const sweep = study.top_n_sweep[pair] || [];
+    const top50 = sweep.find(row => row.n === 50);
+    return `
+    <tr>
+      <td><strong>${label(pair)}</strong></td>
+      <td>${study.rank_correlation[pair].toFixed(2)}</td>
+      <td>${study.median_rank_shift[pair].toLocaleString("en-NZ")}</td>
+      <td>${top50 ? top50.jaccard.toFixed(2) : "—"}</td>
+    </tr>`;
+  }).join("");
+}
+
+function renderTilt(rows) {
+  const host = document.querySelector("#tilt-rows");
+  if (!host) return;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    host.innerHTML = `<tr><td colspan="4">Tilt sensitivity unavailable.</td></tr>`;
+    return;
+  }
+  host.innerHTML = rows.map(row => `
+    <tr>
+      <td><strong>${Number(row.tilt_deg).toFixed(0)}°</strong><br><small>${Number(row.tilt_deg) === 0 ? "horizontal proxy" : "north-facing fixed"}</small></td>
+      <td>${Number(row.december_over_june_output).toFixed(2)}×</td>
+      <td>${(row.mean_capture_rate * 100).toFixed(1)}%</td>
+      <td>${(row.minimum_capture_rate * 100).toFixed(1)}%</td>
+    </tr>`).join("");
 }
 
 fetch("data.json")
@@ -46,8 +115,23 @@ fetch("data.json")
     const latest = data.capture_rates[data.capture_rates.length - 1];
     document.querySelector("#latest-capture").textContent = `${(latest.solar_capture_rate * 100).toFixed(0)}%`;
     document.querySelector("#price-status").textContent = data.price_status;
+    const worst = data.capture_rates.reduce((a, b) => (a.solar_capture_rate <= b.solar_capture_rate ? a : b));
+    const intradayHost = document.querySelector("#intraday-term");
+    if (intradayHost && typeof worst.intraday_capture_points === "number") {
+      const points = worst.intraday_capture_points * 100;
+      intradayHost.textContent = `${points >= 0 ? "+" : "−"}${Math.abs(points).toFixed(1)} pts`;
+      intradayHost.nextElementSibling.textContent =
+        `${worst.year}; the other ${((1 - worst.seasonal_capture_rate) * 100).toFixed(0)} points are seasonal`;
+    }
     renderCandidates();
     renderChart(data.capture_rates);
+    renderDecomposition(data.capture_rates);
+    renderTilt(data.tilt_sensitivity);
+    renderOsmStudy(data.osm_grid_study);
+    const overlapNote = document.querySelector("#grid-overlap-note");
+    if (overlapNote && data.osm_grid_study) {
+      overlapNote.textContent = `demo n=${data.grid_comparison.n}; see the real-geometry run below`;
+    }
   })
   .catch(error => {
     document.querySelector("#candidate-rows").innerHTML = `<tr><td colspan="4">${error.message}. Run the reproduction script.</td></tr>`;

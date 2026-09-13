@@ -16,6 +16,7 @@
     </a>
     <nav aria-label="Primary">
       <a href="#candidates">Candidates</a>
+      <a href="#real-geometry">Real geometry</a>
       <a href="#market">Market value</a>
       <a href="#method">Method</a>
       <a href="https://github.com/Kenchch/nz-solar-siting-screen">Repository</a>
@@ -38,8 +39,9 @@
 
     <section class="metrics" aria-label="Screen summary">
       <article><span>Candidate review</span><strong id="candidate-count">—</strong><small>of <span id="total-count">—</span> demo units</small></article>
-      <article><span>Grid proxy overlap</span><strong id="grid-overlap">—</strong><small>top-N Jaccard index</small></article>
+      <article><span>Grid proxy overlap</span><strong id="grid-overlap">—</strong><small id="grid-overlap-note">top-N Jaccard index</small></article>
       <article><span>Latest solar capture</span><strong id="latest-capture">—</strong><small>ISL0661 market-value signal</small></article>
+      <article><span>Intraday contribution</span><strong id="intraday-term">—</strong><small>worst year; the rest of the gap is seasonal</small></article>
       <article><span>Policy treatment</span><strong>FLAG</strong><small>LUC 1–3 is not auto-excluded</small></article>
     </section>
 
@@ -70,6 +72,28 @@
       </div>
     </section>
 
+    <section class="workspace" id="real-geometry" aria-labelledby="real-geometry-title">
+      <div class="section-heading">
+        <div><p class="eyebrow">M1 &middot; REAL GEOMETRY</p><h2 id="real-geometry-title">A road is not a grid</h2></div>
+        <span class="source-chip" id="osm-scope">Loading OpenStreetMap study&hellip;</span>
+      </div>
+      <div class="market-grid">
+        <div class="candidate-table-wrap">
+          <table>
+            <thead><tr><th>Proxy pair</th><th>Rank correlation</th><th>Median rank shift</th><th>Top-50 overlap</th></tr></thead>
+            <tbody id="osm-rows"><tr><td colspan="4">Loading real-geometry comparison&hellip;</td></tr></tbody>
+          </table>
+        </div>
+        <aside class="finding">
+          <span class="finding-index">01</span>
+          <h3>Measured, not illustrated</h3>
+          <p>The demo above runs on twelve rectangles. This runs the same geometric rules on thousands of mapped Canterbury farmland polygons against mapped transmission lines, distribution lines and road centrelines.</p>
+          <p>Distance to a road tracks the low-voltage network, which is everywhere, and says almost nothing about distance to transmission, which is what a utility-scale connection needs.</p>
+          <p class="caveat">OpenStreetMap is not LINZ: completeness varies, and a mapped land-use polygon is not a parcel. One of the top-ranked sites by road proximity turned out on aerial imagery to be a coastal sand spit. &copy; OpenStreetMap contributors, ODbL.</p>
+        </aside>
+      </div>
+    </section>
+
     <section class="market" id="market" aria-labelledby="market-title">
       <div class="section-heading">
         <div><p class="eyebrow">M2 + M3 · FINANCE &amp; ASSET MANAGEMENT</p><h2 id="market-title">Generation is not revenue</h2></div>
@@ -83,8 +107,29 @@
           <span class="finding-index">02</span>
           <h3>Capture rate measures timing value</h3>
           <p>It compares output-weighted nodal price with the all-hours mean price. Below 100% means a megawatt-hour generated in the solar shape earns less than the time-average spot value.</p>
+          <p>The metered ISL0661 load shape runs through the identical calculation as a control. It captures above 100% in every year, so the gap is about timing, not about PV as such.</p>
           <p class="caveat">It is not a revenue forecast: PPA terms, losses, basis risk, FTRs, curtailment and connection constraints are excluded.</p>
         </aside>
+      </div>
+      <div class="market-grid">
+        <div class="chart-card">
+          <div id="decomposition-chart" role="img" aria-label="Seasonal and intraday contributions to the capture rate by year"></div>
+        </div>
+        <aside class="finding">
+          <span class="finding-index">03</span>
+          <h3>Seasonal mismatch, not midday cannibalisation</h3>
+          <p>The capture rate splits exactly into a seasonal term &mdash; is the output in the expensive months &mdash; and an intraday term &mdash; is it in the expensive hours. Almost all of the discount sits in the seasonal term, because winter dry-year prices arrive when a fixed-tilt array produces least.</p>
+          <p class="caveat">The intraday term is near zero today because this market has very little solar in it. It is the term that grows more negative as PV penetration rises.</p>
+        </aside>
+      </div>
+      <div class="section-heading">
+        <div><p class="eyebrow">M2 &middot; SENSITIVITY</p><h2>Tilt drives the headline</h2></div>
+      </div>
+      <div class="candidate-table-wrap">
+        <table>
+          <thead><tr><th>Array tilt</th><th>December / June output</th><th>Mean capture</th><th>Worst year</th></tr></thead>
+          <tbody id="tilt-rows"><tr><td colspan="4">Loading sensitivity&hellip;</td></tr></tbody>
+        </table>
       </div>
     </section>
 
@@ -93,7 +138,7 @@
       <ol>
         <li><span>S-01—04</span><strong>Exclude</strong><p>Area, shape, land cover and conservation intersections send records to quarantine with rule IDs.</p></li>
         <li><span>S-05</span><strong>Flag</strong><p>LUC 1–3 triggers planning review under the amended NPS-HPL; it does not disappear from the analysis.</p></li>
-        <li><span>S-06—07</span><strong>Rank</strong><p>Grid distance is reported twice. Solar resource informs ordering but cannot conceal grid uncertainty.</p></li>
+        <li><span>S-06—07</span><strong>Rank</strong><p>Grid distance is reported twice and kept out of the score. Only solar resource and usable area order the review queue.</p></li>
         <li><span>QA</span><strong>Stop</strong><p>Wrong CRS fails immediately. A suspiciously high reject rate aborts publication instead of silently producing a map.</p></li>
       </ol>
     </section>

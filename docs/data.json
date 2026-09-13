@@ -20,120 +20,458 @@
       "DEMO-09"
     ]
   },
+  "osm_grid_study": {
+    "source": "OpenStreetMap contributors, ODbL; Canterbury plains extract",
+    "scope": "S-01 area and S-02 width only; land cover, LUC and solar resource still require portal-controlled datasets",
+    "crs": "EPSG:2193",
+    "farmland_polygons_downloaded": 9102,
+    "sites_passing_area_and_width": 2356,
+    "network_features": {
+      "transmission": 203,
+      "distribution": 6535,
+      "roads": 21842
+    },
+    "median_distance_m": {
+      "transmission_m": 4028.6,
+      "distribution_m": 5.9,
+      "road_m": 10.1
+    },
+    "rank_correlation": {
+      "transmission_m|road_m": 0.074,
+      "transmission_m|distribution_m": 0.0968,
+      "distribution_m|road_m": 0.4942
+    },
+    "median_rank_shift": {
+      "transmission_m|road_m": 638,
+      "transmission_m|distribution_m": 671,
+      "distribution_m|road_m": 393
+    },
+    "rank_shift_p90": {
+      "transmission_m|road_m": 1580,
+      "transmission_m|distribution_m": 1678,
+      "distribution_m|road_m": 1261
+    },
+    "verify_grid_flagged": 2347,
+    "top_n_sweep": {
+      "transmission_m|road_m": [
+        {
+          "n": 10,
+          "overlap_count": 0,
+          "non_overlap_count": 20,
+          "jaccard": 0.0,
+          "grid_only": 10,
+          "road_only": 10
+        },
+        {
+          "n": 25,
+          "overlap_count": 0,
+          "non_overlap_count": 50,
+          "jaccard": 0.0,
+          "grid_only": 25,
+          "road_only": 25
+        },
+        {
+          "n": 50,
+          "overlap_count": 0,
+          "non_overlap_count": 100,
+          "jaccard": 0.0,
+          "grid_only": 50,
+          "road_only": 50
+        },
+        {
+          "n": 100,
+          "overlap_count": 0,
+          "non_overlap_count": 200,
+          "jaccard": 0.0,
+          "grid_only": 100,
+          "road_only": 100
+        },
+        {
+          "n": 250,
+          "overlap_count": 36,
+          "non_overlap_count": 428,
+          "jaccard": 0.078,
+          "grid_only": 214,
+          "road_only": 214
+        },
+        {
+          "n": 500,
+          "overlap_count": 112,
+          "non_overlap_count": 776,
+          "jaccard": 0.126,
+          "grid_only": 388,
+          "road_only": 388
+        }
+      ],
+      "transmission_m|distribution_m": [
+        {
+          "n": 10,
+          "overlap_count": 2,
+          "non_overlap_count": 16,
+          "jaccard": 0.111,
+          "grid_only": 8,
+          "road_only": 8
+        },
+        {
+          "n": 25,
+          "overlap_count": 6,
+          "non_overlap_count": 38,
+          "jaccard": 0.136,
+          "grid_only": 19,
+          "road_only": 19
+        },
+        {
+          "n": 50,
+          "overlap_count": 8,
+          "non_overlap_count": 84,
+          "jaccard": 0.087,
+          "grid_only": 42,
+          "road_only": 42
+        },
+        {
+          "n": 100,
+          "overlap_count": 9,
+          "non_overlap_count": 182,
+          "jaccard": 0.047,
+          "grid_only": 91,
+          "road_only": 91
+        },
+        {
+          "n": 250,
+          "overlap_count": 26,
+          "non_overlap_count": 448,
+          "jaccard": 0.055,
+          "grid_only": 224,
+          "road_only": 224
+        },
+        {
+          "n": 500,
+          "overlap_count": 106,
+          "non_overlap_count": 788,
+          "jaccard": 0.119,
+          "grid_only": 394,
+          "road_only": 394
+        }
+      ],
+      "distribution_m|road_m": [
+        {
+          "n": 10,
+          "overlap_count": 2,
+          "non_overlap_count": 16,
+          "jaccard": 0.111,
+          "grid_only": 8,
+          "road_only": 8
+        },
+        {
+          "n": 25,
+          "overlap_count": 2,
+          "non_overlap_count": 46,
+          "jaccard": 0.042,
+          "grid_only": 23,
+          "road_only": 23
+        },
+        {
+          "n": 50,
+          "overlap_count": 2,
+          "non_overlap_count": 96,
+          "jaccard": 0.02,
+          "grid_only": 48,
+          "road_only": 48
+        },
+        {
+          "n": 100,
+          "overlap_count": 2,
+          "non_overlap_count": 196,
+          "jaccard": 0.01,
+          "grid_only": 98,
+          "road_only": 98
+        },
+        {
+          "n": 250,
+          "overlap_count": 30,
+          "non_overlap_count": 440,
+          "jaccard": 0.064,
+          "grid_only": 220,
+          "road_only": 220
+        },
+        {
+          "n": 500,
+          "overlap_count": 174,
+          "non_overlap_count": 652,
+          "jaccard": 0.211,
+          "grid_only": 326,
+          "road_only": 326
+        }
+      ]
+    },
+    "aerial_review": {
+      "queued": 20,
+      "reviewed": 3,
+      "log": "data/aerial_review_log.csv"
+    }
+  },
   "price_status": "official Electricity Authority final prices, ISL0661; unique UTC trading-period keys",
   "capture_rates": [
     {
       "year": 2019,
       "observations": 17520,
       "mean_price_nzd_mwh": 115.5736,
-      "solar_capture_rate": 1.0869,
-      "flat_capture_rate": 1.0
+      "solar_capture_rate": 1.1035,
+      "seasonal_capture_rate": 1.0021,
+      "intraday_capture_points": 0.1014,
+      "flat_capture_rate": 1.0,
+      "load_capture_rate": 1.0285,
+      "load_seasonal_capture_rate": 1.0049,
+      "load_intraday_capture_points": 0.0236
     },
     {
       "year": 2020,
       "observations": 17568,
       "mean_price_nzd_mwh": 103.3158,
-      "solar_capture_rate": 0.9631,
-      "flat_capture_rate": 1.0
+      "solar_capture_rate": 0.9791,
+      "seasonal_capture_rate": 0.9358,
+      "intraday_capture_points": 0.0433,
+      "flat_capture_rate": 1.0,
+      "load_capture_rate": 1.0796,
+      "load_seasonal_capture_rate": 1.0449,
+      "load_intraday_capture_points": 0.0347
     },
     {
       "year": 2021,
       "observations": 17520,
       "mean_price_nzd_mwh": 171.1649,
-      "solar_capture_rate": 0.8816,
-      "flat_capture_rate": 1.0
+      "solar_capture_rate": 0.9149,
+      "seasonal_capture_rate": 0.9068,
+      "intraday_capture_points": 0.008,
+      "flat_capture_rate": 1.0,
+      "load_capture_rate": 1.0554,
+      "load_seasonal_capture_rate": 1.0274,
+      "load_intraday_capture_points": 0.028
     },
     {
       "year": 2022,
       "observations": 17520,
       "mean_price_nzd_mwh": 116.4483,
-      "solar_capture_rate": 0.9341,
-      "flat_capture_rate": 1.0
+      "solar_capture_rate": 0.97,
+      "seasonal_capture_rate": 0.9185,
+      "intraday_capture_points": 0.0515,
+      "flat_capture_rate": 1.0,
+      "load_capture_rate": 1.0529,
+      "load_seasonal_capture_rate": 1.0229,
+      "load_intraday_capture_points": 0.03
     },
     {
       "year": 2023,
       "observations": 17520,
       "mean_price_nzd_mwh": 119.1147,
-      "solar_capture_rate": 1.0871,
-      "flat_capture_rate": 1.0
+      "solar_capture_rate": 1.0452,
+      "seasonal_capture_rate": 1.0593,
+      "intraday_capture_points": -0.0142,
+      "flat_capture_rate": 1.0,
+      "load_capture_rate": 1.0212,
+      "load_seasonal_capture_rate": 0.9932,
+      "load_intraday_capture_points": 0.0281
     },
     {
       "year": 2024,
       "observations": 17568,
       "mean_price_nzd_mwh": 208.9276,
-      "solar_capture_rate": 0.7541,
-      "flat_capture_rate": 1.0
+      "solar_capture_rate": 0.8253,
+      "seasonal_capture_rate": 0.8234,
+      "intraday_capture_points": 0.0019,
+      "flat_capture_rate": 1.0,
+      "load_capture_rate": 1.1419,
+      "load_seasonal_capture_rate": 1.1202,
+      "load_intraday_capture_points": 0.0217
     },
     {
       "year": 2025,
       "observations": 17472,
       "mean_price_nzd_mwh": 157.1919,
-      "solar_capture_rate": 0.8788,
-      "flat_capture_rate": 1.0
+      "solar_capture_rate": 0.9216,
+      "seasonal_capture_rate": 0.9389,
+      "intraday_capture_points": -0.0173,
+      "flat_capture_rate": 1.0,
+      "load_capture_rate": 1.0217,
+      "load_seasonal_capture_rate": 1.0067,
+      "load_intraday_capture_points": 0.015
     }
   ],
   "shape_exponent_sensitivity": [
     {
       "shaping_exponent": 1.0,
-      "mean_capture_rate": 0.9478312834,
-      "minimum_capture_rate": 0.7732346275,
-      "maximum_capture_rate": 1.0874514493
+      "tilt_deg": 25.0,
+      "mean_capture_rate": 0.968916797,
+      "minimum_capture_rate": 0.8347145426,
+      "maximum_capture_rate": 1.103489342,
+      "mean_seasonal_capture_rate": 0.9438170917,
+      "mean_intraday_capture_points": 0.0250997052
     },
     {
       "shaping_exponent": 1.15,
-      "mean_capture_rate": 0.9408128453,
-      "minimum_capture_rate": 0.7540929149,
-      "maximum_capture_rate": 1.0870750447
+      "tilt_deg": 25.0,
+      "mean_capture_rate": 0.9656390734,
+      "minimum_capture_rate": 0.8252837722,
+      "maximum_capture_rate": 1.103450764,
+      "mean_seasonal_capture_rate": 0.9406828135,
+      "mean_intraday_capture_points": 0.0249562599
     },
     {
       "shaping_exponent": 1.3,
-      "mean_capture_rate": 0.9341225648,
-      "minimum_capture_rate": 0.7358388113,
-      "maximum_capture_rate": 1.0929584238
+      "tilt_deg": 25.0,
+      "mean_capture_rate": 0.9625087094,
+      "minimum_capture_rate": 0.8162357339,
+      "maximum_capture_rate": 1.1033823974,
+      "mean_seasonal_capture_rate": 0.9376478786,
+      "mean_intraday_capture_points": 0.0248608308
+    }
+  ],
+  "tilt_sensitivity": [
+    {
+      "tilt_deg": 0.0,
+      "december_over_june_output": 5.8513174414,
+      "mean_capture_rate": 0.9289899619,
+      "minimum_capture_rate": 0.7186128377,
+      "maximum_capture_rate": 1.097314575,
+      "mean_seasonal_capture_rate": 0.8972542196,
+      "mean_intraday_capture_points": 0.0317357422
+    },
+    {
+      "tilt_deg": 25.0,
+      "december_over_june_output": 2.769286042,
+      "mean_capture_rate": 0.9656390734,
+      "minimum_capture_rate": 0.8252837722,
+      "maximum_capture_rate": 1.103450764,
+      "mean_seasonal_capture_rate": 0.9406828135,
+      "mean_intraday_capture_points": 0.0249562599
+    },
+    {
+      "tilt_deg": 35.0,
+      "december_over_june_output": 2.2458660446,
+      "mean_capture_rate": 0.9774122705,
+      "minimum_capture_rate": 0.8600452677,
+      "maximum_capture_rate": 1.10771194,
+      "mean_seasonal_capture_rate": 0.9547384609,
+      "mean_intraday_capture_points": 0.0226738096
+    }
+  ],
+  "seasonal_mismatch_year": 2024,
+  "seasonal_mismatch": [
+    {
+      "month": 1,
+      "mean_price_nzd_mwh": 194.4924,
+      "output_share_pct": 11.4499,
+      "year": 2024
+    },
+    {
+      "month": 2,
+      "mean_price_nzd_mwh": 141.8893,
+      "output_share_pct": 10.0655,
+      "year": 2024
+    },
+    {
+      "month": 3,
+      "mean_price_nzd_mwh": 237.5809,
+      "output_share_pct": 9.2885,
+      "year": 2024
+    },
+    {
+      "month": 4,
+      "mean_price_nzd_mwh": 225.7579,
+      "output_share_pct": 6.9551,
+      "year": 2024
+    },
+    {
+      "month": 5,
+      "mean_price_nzd_mwh": 310.6911,
+      "output_share_pct": 5.2497,
+      "year": 2024
+    },
+    {
+      "month": 6,
+      "mean_price_nzd_mwh": 282.4499,
+      "output_share_pct": 4.1912,
+      "year": 2024
+    },
+    {
+      "month": 7,
+      "mean_price_nzd_mwh": 404.3652,
+      "output_share_pct": 4.8255,
+      "year": 2024
+    },
+    {
+      "month": 8,
+      "mean_price_nzd_mwh": 519.8523,
+      "output_share_pct": 6.5546,
+      "year": 2024
+    },
+    {
+      "month": 9,
+      "mean_price_nzd_mwh": 75.8104,
+      "output_share_pct": 8.4277,
+      "year": 2024
+    },
+    {
+      "month": 10,
+      "mean_price_nzd_mwh": 55.2009,
+      "output_share_pct": 10.4219,
+      "year": 2024
+    },
+    {
+      "month": 11,
+      "mean_price_nzd_mwh": 25.9549,
+      "output_share_pct": 10.9636,
+      "year": 2024
+    },
+    {
+      "month": 12,
+      "mean_price_nzd_mwh": 21.278,
+      "output_share_pct": 11.6068,
+      "year": 2024
     }
   ],
   "solar_time_basis_comparison": [
     {
       "year": 2019,
-      "civil_clock_capture_rate": 1.090213356,
-      "apparent_solar_capture_rate": 1.0869324954,
-      "change_percentage_points": -0.3280860605
+      "civil_clock_capture_rate": 1.1065515327,
+      "apparent_solar_capture_rate": 1.103450764,
+      "change_percentage_points": -0.3100768626
     },
     {
       "year": 2020,
-      "civil_clock_capture_rate": 0.9663873435,
-      "apparent_solar_capture_rate": 0.9631234572,
-      "change_percentage_points": -0.326388633
+      "civil_clock_capture_rate": 0.9850163962,
+      "apparent_solar_capture_rate": 0.9790955995,
+      "change_percentage_points": -0.5920796699
     },
     {
       "year": 2021,
-      "civil_clock_capture_rate": 0.8810488891,
-      "apparent_solar_capture_rate": 0.8815546098,
-      "change_percentage_points": 0.0505720781
+      "civil_clock_capture_rate": 0.9222665602,
+      "apparent_solar_capture_rate": 0.9148656807,
+      "change_percentage_points": -0.7400879495
     },
     {
       "year": 2022,
-      "civil_clock_capture_rate": 0.9321013729,
-      "apparent_solar_capture_rate": 0.9341244021,
-      "change_percentage_points": 0.2023029204
+      "civil_clock_capture_rate": 0.9735634493,
+      "apparent_solar_capture_rate": 0.9700043224,
+      "change_percentage_points": -0.3559126906
     },
     {
       "year": 2023,
-      "civil_clock_capture_rate": 1.0830874181,
-      "apparent_solar_capture_rate": 1.0870750447,
-      "change_percentage_points": 0.3987626631
+      "civil_clock_capture_rate": 1.0505261672,
+      "apparent_solar_capture_rate": 1.045181765,
+      "change_percentage_points": -0.5344402166
     },
     {
       "year": 2024,
-      "civil_clock_capture_rate": 0.7475742568,
-      "apparent_solar_capture_rate": 0.7540929149,
-      "change_percentage_points": 0.6518658012
+      "civil_clock_capture_rate": 0.8227795027,
+      "apparent_solar_capture_rate": 0.8252837722,
+      "change_percentage_points": 0.250426946
     },
     {
       "year": 2025,
-      "civil_clock_capture_rate": 0.8754547246,
-      "apparent_solar_capture_rate": 0.8787869928,
-      "change_percentage_points": 0.3332268203
+      "civil_clock_capture_rate": 0.920874158,
+      "apparent_solar_capture_rate": 0.92159161,
+      "change_percentage_points": 0.071745201
     }
   ],
   "market_year_accounting": [
@@ -180,17 +518,17 @@
   ],
   "top_sites": [
     {
-      "site_id": "DEMO-10",
-      "area_ha": 44.2,
+      "site_id": "DEMO-08",
+      "area_ha": 69.72,
       "width_core_pass": true,
-      "width_2ap_m": 332.3,
+      "width_2ap_m": 417.5,
       "width_methods_disagree": false,
       "S05_hpl_flag": false,
-      "grid_line_m": 0.0,
-      "road_proxy_m": 100.0,
-      "rank_shift": 0,
-      "solar_kwh_m2": 1446,
-      "screen_score": 0.9042
+      "grid_line_m": 1170.0,
+      "road_proxy_m": 300.0,
+      "rank_shift": 1,
+      "solar_kwh_m2": 1450,
+      "screen_score": 0.9667
     },
     {
       "site_id": "DEMO-05",
@@ -203,46 +541,20 @@
       "road_proxy_m": 300.0,
       "rank_shift": 4,
       "solar_kwh_m2": 1442,
-      "screen_score": 0.7042
+      "screen_score": 0.8667
     },
     {
-      "site_id": "DEMO-09",
-      "area_ha": 52.52,
-      "width_core_pass": true,
-      "width_2ap_m": 343.3,
-      "width_methods_disagree": false,
-      "S05_hpl_flag": true,
-      "grid_line_m": 1301.9,
-      "road_proxy_m": 100.0,
-      "rank_shift": 6,
-      "solar_kwh_m2": 1418,
-      "screen_score": 0.6563
-    },
-    {
-      "site_id": "DEMO-08",
-      "area_ha": 69.72,
-      "width_core_pass": true,
-      "width_2ap_m": 417.5,
-      "width_methods_disagree": false,
-      "S05_hpl_flag": false,
-      "grid_line_m": 1170.0,
-      "road_proxy_m": 300.0,
-      "rank_shift": 1,
-      "solar_kwh_m2": 1450,
-      "screen_score": 0.6438
-    },
-    {
-      "site_id": "DEMO-07",
+      "site_id": "DEMO-10",
       "area_ha": 44.2,
       "width_core_pass": true,
       "width_2ap_m": 332.3,
       "width_methods_disagree": false,
-      "S05_hpl_flag": true,
-      "grid_line_m": 3007.7,
-      "road_proxy_m": 300.0,
-      "rank_shift": 6,
-      "solar_kwh_m2": 1432,
-      "screen_score": 0.4562
+      "S05_hpl_flag": false,
+      "grid_line_m": 0.0,
+      "road_proxy_m": 100.0,
+      "rank_shift": 0,
+      "solar_kwh_m2": 1446,
+      "screen_score": 0.6667
     },
     {
       "site_id": "DEMO-03",
@@ -255,7 +567,33 @@
       "road_proxy_m": 990.0,
       "rank_shift": 2,
       "solar_kwh_m2": 1435,
-      "screen_score": 0.2917
+      "screen_score": 0.65
+    },
+    {
+      "site_id": "DEMO-02",
+      "area_ha": 69.72,
+      "width_core_pass": true,
+      "width_2ap_m": 417.5,
+      "width_methods_disagree": false,
+      "S05_hpl_flag": false,
+      "grid_line_m": 2469.8,
+      "road_proxy_m": 1260.0,
+      "rank_shift": 1,
+      "solar_kwh_m2": 1426,
+      "screen_score": 0.6167
+    },
+    {
+      "site_id": "DEMO-07",
+      "area_ha": 44.2,
+      "width_core_pass": true,
+      "width_2ap_m": 332.3,
+      "width_methods_disagree": false,
+      "S05_hpl_flag": true,
+      "grid_line_m": 3007.7,
+      "road_proxy_m": 300.0,
+      "rank_shift": 6,
+      "solar_kwh_m2": 1432,
+      "screen_score": 0.4667
     }
   ]
 }

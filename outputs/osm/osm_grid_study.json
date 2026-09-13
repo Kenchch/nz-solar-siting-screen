@@ -1,0 +1,190 @@
+{
+  "source": "OpenStreetMap contributors, ODbL; Canterbury plains extract",
+  "scope": "S-01 area and S-02 width only; land cover, LUC and solar resource still require portal-controlled datasets",
+  "crs": "EPSG:2193",
+  "farmland_polygons_downloaded": 9102,
+  "sites_passing_area_and_width": 2356,
+  "network_features": {
+    "transmission": 203,
+    "distribution": 6535,
+    "roads": 21842
+  },
+  "median_distance_m": {
+    "transmission_m": 4028.6,
+    "distribution_m": 5.9,
+    "road_m": 10.1
+  },
+  "rank_correlation": {
+    "transmission_m|road_m": 0.074,
+    "transmission_m|distribution_m": 0.0968,
+    "distribution_m|road_m": 0.4942
+  },
+  "median_rank_shift": {
+    "transmission_m|road_m": 638,
+    "transmission_m|distribution_m": 671,
+    "distribution_m|road_m": 393
+  },
+  "rank_shift_p90": {
+    "transmission_m|road_m": 1580,
+    "transmission_m|distribution_m": 1678,
+    "distribution_m|road_m": 1261
+  },
+  "verify_grid_flagged": 2347,
+  "top_n_sweep": {
+    "transmission_m|road_m": [
+      {
+        "n": 10,
+        "overlap_count": 0,
+        "non_overlap_count": 20,
+        "jaccard": 0.0,
+        "grid_only": 10,
+        "road_only": 10
+      },
+      {
+        "n": 25,
+        "overlap_count": 0,
+        "non_overlap_count": 50,
+        "jaccard": 0.0,
+        "grid_only": 25,
+        "road_only": 25
+      },
+      {
+        "n": 50,
+        "overlap_count": 0,
+        "non_overlap_count": 100,
+        "jaccard": 0.0,
+        "grid_only": 50,
+        "road_only": 50
+      },
+      {
+        "n": 100,
+        "overlap_count": 0,
+        "non_overlap_count": 200,
+        "jaccard": 0.0,
+        "grid_only": 100,
+        "road_only": 100
+      },
+      {
+        "n": 250,
+        "overlap_count": 36,
+        "non_overlap_count": 428,
+        "jaccard": 0.078,
+        "grid_only": 214,
+        "road_only": 214
+      },
+      {
+        "n": 500,
+        "overlap_count": 112,
+        "non_overlap_count": 776,
+        "jaccard": 0.126,
+        "grid_only": 388,
+        "road_only": 388
+      }
+    ],
+    "transmission_m|distribution_m": [
+      {
+        "n": 10,
+        "overlap_count": 2,
+        "non_overlap_count": 16,
+        "jaccard": 0.111,
+        "grid_only": 8,
+        "road_only": 8
+      },
+      {
+        "n": 25,
+        "overlap_count": 6,
+        "non_overlap_count": 38,
+        "jaccard": 0.136,
+        "grid_only": 19,
+        "road_only": 19
+      },
+      {
+        "n": 50,
+        "overlap_count": 8,
+        "non_overlap_count": 84,
+        "jaccard": 0.087,
+        "grid_only": 42,
+        "road_only": 42
+      },
+      {
+        "n": 100,
+        "overlap_count": 9,
+        "non_overlap_count": 182,
+        "jaccard": 0.047,
+        "grid_only": 91,
+        "road_only": 91
+      },
+      {
+        "n": 250,
+        "overlap_count": 26,
+        "non_overlap_count": 448,
+        "jaccard": 0.055,
+        "grid_only": 224,
+        "road_only": 224
+      },
+      {
+        "n": 500,
+        "overlap_count": 106,
+        "non_overlap_count": 788,
+        "jaccard": 0.119,
+        "grid_only": 394,
+        "road_only": 394
+      }
+    ],
+    "distribution_m|road_m": [
+      {
+        "n": 10,
+        "overlap_count": 2,
+        "non_overlap_count": 16,
+        "jaccard": 0.111,
+        "grid_only": 8,
+        "road_only": 8
+      },
+      {
+        "n": 25,
+        "overlap_count": 2,
+        "non_overlap_count": 46,
+        "jaccard": 0.042,
+        "grid_only": 23,
+        "road_only": 23
+      },
+      {
+        "n": 50,
+        "overlap_count": 2,
+        "non_overlap_count": 96,
+        "jaccard": 0.02,
+        "grid_only": 48,
+        "road_only": 48
+      },
+      {
+        "n": 100,
+        "overlap_count": 2,
+        "non_overlap_count": 196,
+        "jaccard": 0.01,
+        "grid_only": 98,
+        "road_only": 98
+      },
+      {
+        "n": 250,
+        "overlap_count": 30,
+        "non_overlap_count": 440,
+        "jaccard": 0.064,
+        "grid_only": 220,
+        "road_only": 220
+      },
+      {
+        "n": 500,
+        "overlap_count": 174,
+        "non_overlap_count": 652,
+        "jaccard": 0.211,
+        "grid_only": 326,
+        "road_only": 326
+      }
+    ]
+  },
+  "aerial_review": {
+    "queued": 20,
+    "reviewed": 3,
+    "log": "data/aerial_review_log.csv"
+  }
+}

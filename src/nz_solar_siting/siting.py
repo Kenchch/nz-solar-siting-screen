@@ -1,4 +1,11 @@
-"""M1: auditable exclusion, flag and ranking rules."""
+"""M1: auditable exclusion, flag and ranking rules.
+
+``screen_score`` orders a review queue from the two attributes the screen can
+actually measure from open data: solar resource and usable area. Every weight
+and threshold comes from ``config/assumptions.yml`` via :class:`SitingConfig`.
+Grid distance is reported as two distances, two ranks, a rank shift and the
+``S06_verify_grid`` flag, and is not folded into the score.
+"""
 
 from __future__ import annotations
 
@@ -23,6 +30,12 @@ class SitingConfig:
         "Orchard Vineyard or Other Perennial Crop",
     )
     grid_distance_review_m: float = 5000.0
+    rank_shift_review: int = 3
+    # Review-ordering weights only. Grid distance is deliberately absent: the
+    # project's own argument is that network proximity is too uncertain to act
+    # as a score, so it stays a published distance pair plus a verify flag.
+    solar_score_weight: float = 0.6
+    area_score_weight: float = 0.4
 
 
 def evaluate_sites(
@@ -65,7 +78,7 @@ def evaluate_sites(
     out = add_grid_proxies(out, powerlines, roads)
     out["S06_verify_grid"] = (
         out[["grid_line_m", "road_proxy_m"]].max(axis=1) > cfg.grid_distance_review_m
-    ) | (out["rank_shift"] >= 3)
+    ) | (out["rank_shift"] >= cfg.rank_shift_review)
     out["solar_rank"] = out["solar_kwh_m2"].rank(ascending=False, method="min").astype(int)
 
     exclude_columns = ["S01_pass", "S02_pass", "S03_pass", "S04_pass"]
@@ -77,10 +90,15 @@ def evaluate_sites(
     out["status"] = out["failed_rule_ids"].map(
         lambda rules: "candidate_review" if not rules else "quarantine"
     )
+    weight_total = cfg.solar_score_weight + cfg.area_score_weight
+    if weight_total <= 0:
+        raise ValueError("screen-score weights must sum to a positive number")
     out["screen_score"] = (
-        0.55 * out["road_proxy_m"].rank(pct=True, ascending=False)
-        + 0.25 * out["grid_line_m"].rank(pct=True, ascending=False)
-        + 0.20 * out["solar_kwh_m2"].rank(pct=True)
+        (
+            cfg.solar_score_weight * out["solar_kwh_m2"].rank(pct=True)
+            + cfg.area_score_weight * out["area_ha"].rank(pct=True)
+        )
+        / weight_total
     ).round(4)
 
     audit = out[[

@@ -18,6 +18,10 @@ def write_site_cards(
 ) -> list[Path]:
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
+    for stale in output.glob("*_card.png"):
+        # The selected sites change whenever the score changes; leaving the
+        # previous run's cards behind would publish a stale top-three.
+        stale.unlink()
     paths: list[Path] = []
     for _, row in candidates.nlargest(count, "screen_score").iterrows():
         fig, (ax, info) = plt.subplots(1, 2, figsize=(10, 5), gridspec_kw={"width_ratios": [1.55, 1]})
