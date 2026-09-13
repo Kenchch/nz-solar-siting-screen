@@ -32,13 +32,13 @@
       "name": "Per-site terrain statistics",
       "source": "Copernicus GLO-30 DEM",
       "file": "derived/osm/site_terrain.csv",
-      "sha256": "86006ab88f928b62811ba43a9a89045d2584825067beb7e58c6af1e301a8e796"
+      "sha256": "12db9f57a98ecc4a3601dd07b65c8f50b94ea32ef6b177e1dcdb6887c73c7ab0"
     },
     {
       "name": "Aerial review log",
       "source": "LINZ Basemaps imagery; CC BY 4.0",
       "file": "aerial_review_log.csv",
-      "sha256": "f6ab9e864ae15ae57ce84b2773bdc61ac0303f47070dad446a0724f2d9987136"
+      "sha256": "97f59a4ed2085bfcefe682c40bf75e4b197698df9f38e4dac2e2f902195ab9b7"
     }
   ]
 }

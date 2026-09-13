@@ -54,6 +54,9 @@ def verify_data_checksums(data_root: str | Path, relative_paths: tuple[str, ...]
     }
     for relative in relative_paths:
         path = root / relative
-        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        content = path.read_bytes()
+        if path.suffix in {".csv", ".json"}:
+            content = content.replace(b"\r\n", b"\n")
+        actual = hashlib.sha256(content).hexdigest()
         if expected.get(relative) != actual:
             raise RuntimeError(f"committed input checksum mismatch: data/{relative}")
