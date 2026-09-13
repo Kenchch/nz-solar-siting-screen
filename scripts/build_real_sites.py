@@ -162,43 +162,48 @@ class MissingRasterExport(RuntimeError):
     """Raised when a raster-only layer has not been exported yet."""
 
 
-def sample_raster(sites: gpd.GeoDataFrame, path: Path, label: str) -> pd.Series:
-    """Mean raster value inside each polygon, from a locally exported GeoTIFF.
+def sample_raster(sites: gpd.GeoDataFrame, path: Path, spec: dict, label: str) -> pd.Series:
+    """Mean raster value inside each polygon, in annual kWh/m2.
 
     Some LRIS layers are grids, and a grid has no WFS feature type: the portal
     serves rendered WMTS tiles, whose pixels are palette colours rather than
     measurements. Reading a value therefore needs the raster itself, exported
     once from the layer page.
+
+    Windows are read from disk one polygon at a time. The national LENZ grid is
+    23,180 x 24,362 cells, so reading the whole band would cost about a gigabyte
+    of memory to answer questions about a few thousand small polygons.
     """
     import rasterio
     from rasterio.features import geometry_mask
+    from rasterio.windows import Window, from_bounds
 
+    scale = float(spec.get("raster_scale", 1.0))
+    per_year = float(spec.get("days_per_year", 1.0)) / float(spec.get("megajoules_per_kwh", 1.0))
     with rasterio.open(path) as dataset:
         if dataset.crs is None:
             raise MissingRasterExport(f"{label}: {path} has no CRS")
         frame = sites.to_crs(dataset.crs)
-        band = dataset.read(1, masked=True)
         values = []
         for geometry in frame.geometry:
-            window = rasterio.windows.from_bounds(*geometry.bounds, transform=dataset.transform)
+            window = from_bounds(*geometry.bounds, transform=dataset.transform)
             row = max(0, int(window.row_off))
             col = max(0, int(window.col_off))
-            height = min(band.shape[0] - row, int(window.height) + 1)
-            width = min(band.shape[1] - col, int(window.width) + 1)
+            height = min(dataset.height - row, int(window.height) + 1)
+            width = min(dataset.width - col, int(window.width) + 1)
             if height <= 0 or width <= 0:
                 values.append(float("nan"))
                 continue
-            patch = band[row:row + height, col:col + width]
-            transform = dataset.window_transform(
-                rasterio.windows.Window(col, row, width, height)
-            )
+            read_window = Window(col, row, width, height)
+            patch = dataset.read(1, window=read_window, masked=True)
             mask = ~geometry_mask(
-                [geometry], out_shape=patch.shape, transform=transform,
+                [geometry], out_shape=patch.shape,
+                transform=dataset.window_transform(read_window),
                 invert=False, all_touched=True,
             )
-            selected = patch[mask & ~patch.mask] if hasattr(patch, "mask") else patch[mask]
+            selected = patch[mask & ~patch.mask]
             values.append(float(selected.mean()) if selected.size else float("nan"))
-    return pd.Series(values, index=sites.index, dtype=float)
+    return pd.Series(values, index=sites.index, dtype=float) * scale * per_year
 
 
 def first_present(frame: gpd.GeoDataFrame, candidates: tuple[str, ...], label: str) -> str:
@@ -262,7 +267,7 @@ def build_sites(
             attach_by_point(sites, solar, solar_column, "solar_kwh_m2"), errors="coerce"
         )
     else:
-        sites["solar_kwh_m2"] = sample_raster(sites, solar, "solar")
+        sites["solar_kwh_m2"] = sample_raster(sites, solar, config["layers"]["solar"], "solar")
     # A site with no LUC or no solar value cannot be screened by S-05 or S-07.
     # Dropping it silently would hide a join failure, so report and quarantine.
     incomplete = sites["luc_class"].isna() | sites["solar_kwh_m2"].isna()

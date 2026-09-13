@@ -119,9 +119,18 @@ real_data:
       portal: lris
       layer_id: 48095
       source: raster_export
-      raster_path: data/raw/lris/lenz_mean_annual_solar_radiation.tif
+      # The portal's own export filename, so nothing has to be renamed by hand.
+      raster_path: data/raw/lris/lenz-mean-annual-solar-radiation.tif
       export_page: https://lris.scinfo.org.nz/layer/48095
       dataset_version: LENZ mean annual solar radiation
+      # The grid is an integer surface: LENZ states its units are MJ/m2/day
+      # multiplied by ten, so a stored 123 means 12.3 MJ/m2/day. The screen
+      # ranks on annual kWh/m2, so the stored value is scaled and converted
+      # here rather than by a constant buried in code.
+      raster_scale: 0.1
+      raster_units: MJ/m2/day
+      days_per_year: 365.25
+      megajoules_per_kwh: 3.6
     powerlines:
       portal: linz
       layer_id: 50311    # NZ Powerline Centrelines (Topo 1:50k) - verify

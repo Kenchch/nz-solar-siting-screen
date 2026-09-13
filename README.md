@@ -279,12 +279,38 @@ Three things about it are worth knowing before the first run:
   to `sites_unattributed.gpkg` with a count on stdout, because a silent drop
   would hide a failed join.
 
-**Status of the live run.** Five of the six layers have been fetched from the
-real services and their schemas confirmed: LCDB polygons carry `Name_2018`,
-NZLRI carries `lcorrclass`, the LINZ powerline and road centrelines and the
-Protected Areas layer all return features in the study bbox. The sixth, solar,
-is waiting on the one-off raster export described above, so no full screening
-run has been produced yet.
+**Status of the live run.** It has been run end to end. 27,452 LCDB polygons in
+the study bbox became **1,166 candidate sites** with all four attributes (9 more
+had no LUC or solar value and went to `sites_unattributed`), and the screen
+returned **632 candidates and 534 quarantined**. Sampled LENZ values land at
+1,325–1,441 kWh/m²/yr, which is the range the demo fixtures were written to.
+**S-05 now has real land behind it: 237 of the 632 candidates are LUC 1–3**, so
+the NPS-HPL flag is finally pointing at actual Canterbury paddocks rather than
+at twelve rectangles.
+
+The assembled layers and the screening outputs are **not committed**. LCDB and
+NZLRI come from the LRIS portal under its item terms, which this project does
+not redistribute; `data/derived/real/` and `outputs/real/` are gitignored, and
+the run is reproducible from the two API keys.
+
+Three things the real run exposed that the demo could not:
+
+- **An LCDB polygon is not a parcel.** Land cover merges across ownership, so
+  the largest polygon the assembly produced was 230,000 ha and the largest
+  surviving candidate is 2,524 ha. The area and width rules pass those
+  trivially. A real shortlist needs LCDB intersected with cadastral parcels
+  (LINZ NZ Primary Parcels), which is the obvious next step and is not done.
+- **LINZ Topo50 powerlines carry no voltage attribute** — the layer has
+  `t50_fid` and `support_ty` and nothing else. So the voltage tiering has
+  nothing to tier on and falls back to the whole layer, which `grid_basis`
+  records as `all_mapped_powerlines`. The ρ = 0.11 connection-tier finding is
+  reproducible on OpenStreetMap, which tags voltage, and **not** on LINZ, which
+  does not. That is worth knowing before quoting it as a LINZ result.
+- **S-08, S-09 and S-10 do not run in `solar-screen`.** They live in the OSM
+  study entry point, so the real run applied S-01 to S-07 only — and 137 of its
+  632 candidates have a mean slope above the 10° exclusion threshold. The
+  terrain table is computed and sitting beside them; wiring the three rules into
+  `evaluate_sites` is the next change.
 
 `tests/test_real_sites.py` exercises the assembly on layers shaped like the real
 ones — publisher column spellings, multipart polygons, sites outside every
