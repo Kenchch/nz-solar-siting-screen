@@ -304,14 +304,19 @@ def preflight(services: dict[str, tuple[str, str]], layers: dict, timeout: int) 
     for name, spec in layers.items():
         if spec.get("source") == "raster_export":
             path = ROOT / spec["raster_path"]
+            # Create the directory rather than naming one that does not exist:
+            # "save it here" is not useful advice if "here" is missing.
+            path.parent.mkdir(parents=True, exist_ok=True)
             state = "present" if path.exists() else "NOT EXPORTED"
             print(f" {' ' if path.exists() else '?'} {name:<12} raster           {state}: "
                   f"{spec['raster_path']}", flush=True)
             if not path.exists():
                 problems.append(
-                    f"{name} needs a one-off GeoTIFF export from {spec['export_page']} "
-                    f"saved to {spec['raster_path']} (it is a grid layer; LRIS offers no WCS "
-                    f"for it, so its values cannot be read over the web services)"
+                    f"{name} is a grid layer, and LRIS offers no WCS for it, so its values "
+                    f"cannot be read over the web services."
+                    f"\n    Export it once from {spec['export_page']} as GeoTIFF in EPSG:2193,"
+                    f"\n    and save it as exactly this file (the folder now exists):"
+                    f"\n      {path}"
                 )
             continue
         service, key = services[spec["portal"]]
