@@ -14,7 +14,7 @@ They are **reported side by side, not integrated**, and the seams are worth nami
 
 1. **Empirical — generation is not revenue, and the reason is seasonal, not midday cannibalisation.** Official Electricity Authority half-hourly final prices at ISL0661 give apparent-solar-time capture rates from **82.5% to 110.3%** over 2019–2025 for a north-facing 25° array. Five of seven annual values are below 100%; 2019 and 2023 are above it. The worst year is 2024 at **82.5%**, a gap of 17.5 points below the time-average price. The decomposition below attributes **−17.7 points of it to seasonal mismatch**; the intraday term is **+0.2 points**, so the shape of the day actually gave a little value back. The discount is dry-year winter prices arriving when a fixed-tilt array produces least, not midday price suppression.
 2. **Empirical — a road proxy tracks the low-voltage network, not the one a project can connect to.** Measured on **2,356 real Canterbury farmland polygons** that pass the area and width rules, against mapped OpenStreetMap lines split by voltage. Spearman rank correlation with distance-to-road: **0.47** for ≤22 kV distribution, **0.11** for the 33–66 kV tier a Canterbury project actually connects at, **0.04** for ≥110 kV transmission — all significant at n = 2,356, and the middle one explains about 1% of the variance. Roads find the poles that are everywhere and say almost nothing about the connection that matters. This is why both distances and a `verify_grid` flag stay visible and why grid distance was removed from `screen_score` entirely. See [the OSM study](#measuring-the-grid-proxy-disagreement-on-real-geometry) for the caveats, which are substantial.
-3. **Method warning — the screen was missing terrain and water, and an aerial check is what found it.** Of the twenty largest grid-proxy disagreements, **11 are not developable land at all** — coastal barrier spit, wetland margin, or 14–24° peninsula slope. None is a grid problem. S-08 slope was documented as "not implemented" and there was no water or coastal rule at all; all three now exist, built from free inputs, and they **exclude 8 of those 11, flag 2 more, and miss 1**. That sample was selected on disagreement, so the 55% is the road proxy's worst cases, not a population rate.
+3. **Method warning — the screen was missing terrain and water, and an aerial check is what found it.** Of the twenty largest grid-proxy disagreements, **11 are not developable land at all** — coastal barrier spit, wetland margin, or 14–24° peninsula slope. None is a grid problem. S-08 slope was documented as "not implemented" and there was no water or coastal rule at all; all three now exist, built from free inputs, and on that sample they **exclude 8 of the 11, flag 2 more, and miss 1**. On a **held-out** second sample of twenty they reach 3 of 5, miss 2 — both land-use failures that only real land-cover data can catch — and wrongly exclude 1 good site over a farm irrigation pond. Those samples were selected on disagreement, so neither failure rate is a population rate.
 4. **Method warning — a single width proxy changes the screening answer.** The 180 m inward-buffer test is the S-02 baseline; `2A/P` remains beside it as an audit comparator. The deterministic geometry stress case is a 200 × 200 m square: the core test passes while `2A/P` reports 100 m and fails. The run manifest reports the number of disagreements instead of hiding this modelling choice.
 
 ## Seasonal or intraday? The capture rate splits exactly
@@ -183,19 +183,29 @@ Median mean slope across the study population is 0.77° — it is the Canterbury
 
 GLO-30 is a **surface** model, not a terrain model: it includes shelterbelts, buildings and trees, which inflate slope locally on otherwise flat paddocks. S-08 therefore uses the mean over the polygon rather than the maximum, where a single row of poplars would dominate, and the rule is a terrain screen rather than a civil design input. A real design stage wants a bare-earth DEM.
 
-Scored against the twenty labelled sites, keeping exclusion and flagging apart — the same distinction S-05 rests on, since a flagged site still reaches a human as a candidate:
+Scored against the labelled sites, keeping exclusion and flagging apart — the same distinction S-05 rests on, since a flagged site still reaches a human as a candidate. **Two samples**, both drawn by the same criterion: **A** is the twenty largest connection-tier-versus-road disagreements, and its labels were in view when the thresholds were chosen. **B** is the next twenty, labelled from imagery *after* the thresholds were frozen. A can only ever be in-sample; B is the held-out check.
 
-| Outcome for the 11 non-developable sites | Count |
-|---|---:|
-| **Excluded** by S-08 slope | 4 |
-| **Excluded** by S-09 mapped water | 4 |
-| **Excluded**, total | **8** |
-| Flagged only by S-10 coastal — still in the candidate set | 2 |
-| Neither excluded nor flagged | 1 |
+| | A (in-sample) | B (held out) |
+|---|---:|---:|
+| Reviewed | 20 | 20 |
+| Not developable | 11 (55%) | **5 (25%)** |
+| **Excluded** by S-08 slope | 4 | 0 |
+| **Excluded** by S-09 mapped water | 4 | 1 |
+| **Excluded**, total | **8** | **1** |
+| Flagged only by S-10 coastal | 2 | 2 |
+| Neither excluded nor flagged | 1 | **2** |
+| Developable sites wrongly excluded | 0 | **1** |
+| Developable sites flagged only | 0 | 4 |
 
-No developable site is excluded, and none is flagged either.
+**The held-out result is weaker than the in-sample one, and the reasons are specific rather than embarrassing.**
 
-> **This is in-sample.** The thresholds were chosen with those twenty labels in view. The number says the rules express what the imagery showed; it is not an accuracy claim on unseen sites, and it should not be quoted as one.
+First, B is a milder sample by construction: its median rank shift is 2,088 against A's 2,192, and only a quarter of it is bad land rather than half. Selecting on disagreement puts the most extreme cases in A, so a lower failure rate in B is what should happen. Anyone quoting 55% as the screen's false-positive rate is quoting the worst twenty sites in the region.
+
+Second, three of B's five failures are the same landforms the rules were built for — barrier spit, lagoon wetland, estuary margin — and the rules reach all three: one excluded on mapped water, two flagged for coastal review. **The other two are a failure mode that did not appear in A at all**: a rural settlement of lifestyle blocks with dwellings on every title, and a remnant paddock on a town's edge boxed in by a motorway interchange and a rail corridor. Both are tagged farmland in OpenStreetMap and both are flat, dry and inland, so no terrain or water rule can see them. They are land-use failures, and **LCDB would classify both as built-up** — which is the most concrete argument in this repository for finishing the LRIS run.
+
+Third, B produced the rules' first false exclusion: an irrigated cropping block that S-09 threw out because a farm **irrigation pond** touches the polygon. `natural=water` does not distinguish a storage pond from a wetland, and "any intersection" is too blunt a test. The rule is left as it is and the failure is reported, because tuning it on the sample that exposed it is how the in-sample problem started.
+
+> **Sample A is in-sample.** Its thresholds were chosen with those labels in view, so its 8-of-11 says the rules express what the imagery showed, not that they generalise. Sample B is the generalisation test, and it is reported above at full strength: 3 of 5 reached, 2 missed, 1 good site wrongly excluded.
 
 The two flagged-only sites are the honest middle: both are on the barrier spit, the coastal flag fires on them, and a reviewer opening the flag would see what the imagery shows. They are not failures of the screen, but they are not exclusions either, and rounding them up to "caught" would be the kind of quiet overstatement this project exists to avoid.
 
@@ -352,7 +362,7 @@ Both are executed top to bottom by `tests/test_notebooks.py`, so they cannot qui
 - `outputs/demo/run_manifest.json` and `findings.json` — machine-readable provenance and dashboard payload
 - `outputs/osm/osm_grid_distance.csv` and `osm_grid_study.json` — the real-geometry grid-proxy comparison over 2,356 OSM farmland polygons
 - `outputs/osm/aerial_review_queue.csv` — the twenty largest disagreements with coordinates, a LINZ Basemaps link, the terrain and water columns, and the completed aerial verdicts
-- `data/aerial/` — the imagery each verdict was written from, one file per reviewed site
+- `data/aerial/` — the imagery each verdict was written from, one file per reviewed site across both samples
 - `data/derived/osm/site_terrain.csv` — per-site mean and p90 slope from Copernicus GLO-30
 - `outputs/osm/osm_grid_disagreement.png` — proxy scatter and the top-N agreement sweep
 
@@ -366,7 +376,7 @@ The market series are different: both the ISL0661 half-hourly final prices and t
 
 ## Validation
 
-One hundred and seven automated tests cover shared configuration and both CLIs, CRS/schema/geometry gates, exclusion and flag rules, both width methods, candidate-only ranking, spatial-indexed nearest distance, configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, strict market-value input validity, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry, seasonal/intraday decomposition, the metered load control, sensitivities, OSM voltage tiers, terrain and water rules, aerial-review evidence, the real-data assembly path against fixtures — publisher column spellings, multipart splitting, geometry-derived identifiers, the refusal to run without an API key — and top-to-bottom notebook execution.
+One hundred and twenty-eight automated tests cover shared configuration and both CLIs, CRS/schema/geometry gates, exclusion and flag rules, both width methods, candidate-only ranking, spatial-indexed nearest distance, configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, strict market-value input validity, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry, seasonal/intraday decomposition, the metered load control, sensitivities, OSM voltage tiers, terrain and water rules, aerial-review evidence, the real-data assembly path against fixtures — publisher column spellings, multipart splitting, geometry-derived identifiers, the refusal to run without an API key — the rule register as a contract against the library that implements it, the single S-06 implementation and its refusal to flag on rank shift, the held-out sample B scorecard, and top-to-bottom notebook execution.
 
 GitHub Actions installs the committed lock, reruns both complete pipelines and compares the full tracked output-file manifest. It strictly diffs CSV/JSON; because GeoPackage and PNG bytes vary across operating systems, `scripts/verify_reproduced_outputs.py` compares GeoPackages by fields and geometry and applies a bounded pixel-difference check to every generated figure. Binary outputs are therefore covered without requiring byte-identical cross-platform files.
 

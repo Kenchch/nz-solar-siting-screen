@@ -1,6 +1,10 @@
 # Aerial review evidence
 
-One image per site in `outputs/osm/aerial_review_queue.csv`, named by `site_id`.
+One image per site in `outputs/osm/aerial_review_queue.csv`, named by `site_id`,
+across both labelled samples: **A** is the twenty largest grid-proxy
+disagreements and **B** is the next twenty, held out and labelled only after the
+terrain and water thresholds were frozen. The `sample` column in the log says
+which is which, and the two are never pooled into one accuracy figure.
 Each is a 3 × 3 mosaic of LINZ Basemaps aerial tiles at WebMercatorQuad zoom 14,
 centred on the polygon centroid, with the centroid ringed in red. At this
 latitude a z14 tile is about 1,765 m wide, so the mosaic covers roughly

@@ -61,6 +61,37 @@ TIER_COLOURS = {
 }
 
 
+def rule_scorecard(sample: pd.DataFrame, name: str, shift_column: str) -> dict[str, object]:
+    """What the frozen rules do to one labelled sample.
+
+    Exclusion and flagging are counted apart, because a flagged site still
+    reaches a human as a candidate. Sample A is in-sample by construction - the
+    thresholds were chosen with its labels in view - and sample B is the
+    held-out check, so the two are never added together.
+    """
+    bad = sample["developable"] == "no"
+    good = sample["developable"] == "yes"
+    excluded = ~sample["terrain_water_pass"]
+    flagged_only = sample["terrain_water_pass"] & sample["S10_coastal_flag"]
+    reviewed = int(sample["finding"].notna().sum())
+    return {
+        "basis": "in-sample: thresholds chosen with these labels in view"
+        if name == "A" else "held out: labelled from imagery after the thresholds were frozen",
+        "reviewed": reviewed,
+        "not_developable": int(bad.sum()),
+        "false_positive_rate": round(float(bad.sum()) / reviewed, 3) if reviewed else None,
+        "median_rank_shift": int(sample[shift_column].median()),
+        "excluded_by_slope": int((bad & ~sample["S08_slope_pass"]).sum()),
+        "excluded_by_water": int((bad & ~sample["S09_water_pass"]).sum()),
+        "excluded_total": int((bad & excluded).sum()),
+        "flagged_only_by_coast": int((bad & flagged_only).sum()),
+        "neither_excluded_nor_flagged": sorted(sample.loc[bad & ~excluded & ~flagged_only, "site_id"]),
+        "developable_sites_wrongly_excluded": int((good & excluded).sum()),
+        "wrongly_excluded": sorted(sample.loc[good & excluded, "site_id"]),
+        "developable_sites_flagged_only": int((good & flagged_only).sum()),
+    }
+
+
 def rank_correlation(left: pd.Series, right: pd.Series) -> dict[str, object]:
     """Spearman correlation with its p-value and a Fisher confidence interval.
 
@@ -142,7 +173,11 @@ def plot_disagreement(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", default="outputs/osm")
-    parser.add_argument("--aerial-sample", type=int, default=20)
+    parser.add_argument(
+        "--aerial-sample", type=int, default=20,
+        help="Sites per labelled sample. Two are drawn: A is the worst N "
+             "disagreements, B the next N, giving a held-out set.",
+    )
     arguments = parser.parse_args()
 
     project_config = load_project_config(ROOT / "config" / "assumptions.yml")
@@ -292,7 +327,13 @@ def main() -> None:
     # disagreements with coordinates and a deep link, and fold in the findings
     # already recorded so a re-run never discards them.
     shift = shift_column(f"{connection_tier}_m", "road_m")
-    sample = sites.nlargest(arguments.aerial_sample, shift).copy()
+    # Two samples by the same criterion. A was labelled first and the terrain and
+    # water thresholds were chosen with those labels in view, so A can only ever
+    # be in-sample. B is the next N by the same measure, labelled from imagery
+    # after the thresholds were frozen, and is the held-out check.
+    drawn = sites.nlargest(arguments.aerial_sample * 2, shift).copy()
+    drawn["sample"] = ["A"] * arguments.aerial_sample + ["B"] * (len(drawn) - arguments.aerial_sample)
+    sample = drawn
     centroids = sample.geometry.centroid.to_crs("EPSG:4326")
     sample["latitude"] = centroids.y.round(6)
     sample["longitude"] = centroids.x.round(6)
@@ -312,6 +353,9 @@ def main() -> None:
         if not (ROOT / image).exists():
             raise FileNotFoundError(f"aerial review log cites missing evidence: {image}")
     sample = sample.merge(log, on="site_id", how="left", validate="one_to_one")
+    if "sample_x" in sample.columns:  # the log also carries a sample column
+        sample["sample"] = sample["sample_y"].fillna(sample["sample_x"])
+        sample = sample.drop(columns=["sample_x", "sample_y"])
     reviewed = int(sample["finding"].notna().sum())
     not_developable = int((sample["developable"] == "no").sum())
     # Score the new rules against the hand-labelled sample. These thresholds were
@@ -324,37 +368,31 @@ def main() -> None:
     # still reaches a human as a candidate, so it is not "caught".
     excluded = ~sample["terrain_water_pass"]
     flagged_only = sample["terrain_water_pass"] & sample["S10_coastal_flag"]
+    # No pooled figure is published. A is in-sample and B is held out; adding
+    # them would produce a number that means neither thing.
     summary["aerial_review"] = {
         "queued": int(len(sample)),
         "reviewed": reviewed,
-        "not_developable": not_developable,
-        "false_positive_rate": round(not_developable / reviewed, 3) if reviewed else None,
         "selection": (
-            "the largest connection-tier-versus-road rank disagreements; selected on "
-            "disagreement, so this rate describes the road proxy's worst cases and "
-            "not the candidate population"
+            "the largest connection-tier-versus-road rank disagreements; sample A is the "
+            "worst N and sample B the next N. Selected on disagreement, so neither failure "
+            "rate describes the candidate population"
         ),
-        "in_sample_rule_check": {
-            "excluded_by_slope": int((bad & ~sample["S08_slope_pass"]).sum()),
-            "excluded_by_water": int((bad & ~sample["S09_water_pass"]).sum()),
-            "excluded_total": int((bad & excluded).sum()),
-            "flagged_only_by_coast": int((bad & flagged_only).sum()),
-            "neither_excluded_nor_flagged": sorted(
-                sample.loc[bad & ~excluded & ~flagged_only, "site_id"]
-            ),
-            "developable_sites_wrongly_excluded": int((good & excluded).sum()),
-            "developable_sites_flagged_only": int((good & flagged_only).sum()),
+        "by_sample": {
+            name: rule_scorecard(group, name, shift)
+            for name, group in sample.groupby("sample", sort=True)
         },
         "second_pass": {
             "confirmed": int((sample["second_pass_result"] == "confirmed").sum()),
             "corrected": int((sample["second_pass_result"] == "corrected").sum()),
+            "not_required": int((sample["second_pass_result"] == "not_required").sum()),
             "author_confirmed": int(sample["author_confirmed_on"].notna().sum()),
         },
         "log": log_path.relative_to(ROOT).as_posix(),
     }
     (output / "osm_grid_study.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     sample[[
-        "site_id", "area_ha", *proxies, f"{connection_tier}_rank", "road_rank", shift,
+        "site_id", "sample", "area_ha", *proxies, f"{connection_tier}_rank", "road_rank", shift,
         "mean_slope_deg", "water_m", "coastline_m",
         "S08_slope_pass", "S09_water_pass", "S10_coastal_flag",
         "latitude", "longitude", "basemaps_url",

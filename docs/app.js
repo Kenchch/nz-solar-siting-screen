@@ -114,42 +114,51 @@ function renderAerial(study) {
   const panel = document.querySelector("#aerial-panel");
   const text = document.querySelector("#aerial-summary");
   const review = study && study.aerial_review;
-  if (!panel || !review) return;
-  const bad = review.not_developable;
-  const good = review.queued - bad;
-  if (text) {
-    text.textContent = `${bad} of the ${review.queued} are not developable land at all — five on a coastal barrier spit, one on a wetland margin, four on 14–24° peninsula slope and one flat but boxed in by steep ground. The other ${good} are genuine flat plains blocks 7–11 km from the nearest mapped 33–66 kV line with a road along the boundary.`;
-  }
-  const check = review.in_sample_rule_check || {};
+  if (!panel || !review || !review.by_sample) return;
+  const cards = review.by_sample;
+  const order = Object.keys(cards).sort();
   const terrain = study.terrain_water;
+
+  if (text) {
+    const a = cards.A, b = cards.B;
+    text.textContent = `Sample A is the ${a.reviewed} largest disagreements: ${a.not_developable} are not developable land. Sample B is the next ${b.reviewed}, labelled only after the rules were frozen: ${b.not_developable} are. B is the milder sample by construction, and it is the one that tests whether the rules generalise.`;
+  }
   const rulesHost = document.querySelector("#aerial-rules");
-  if (rulesHost && check.excluded_total !== undefined) {
-    const missed = check.neither_excluded_nor_flagged.length;
-    rulesHost.textContent = `The rules added afterwards exclude ${check.excluded_total} of those ${bad} outright — ${check.excluded_by_slope} on slope, ${check.excluded_by_water} on mapped water — flag ${check.flagged_only_by_coast} more for coastal review without excluding them, and miss ${missed}. No genuine site is excluded.`;
+  if (rulesHost) {
+    const b = cards.B;
+    rulesHost.textContent = `On the held-out sample the rules exclude ${b.excluded_total} of those ${b.not_developable}, flag ${b.flagged_only_by_coast} more for coastal review, miss ${b.neither_excluded_nor_flagged.length} — both land-use failures no terrain rule can see — and wrongly exclude ${b.developable_sites_wrongly_excluded} good site over a farm irrigation pond.`;
   }
   const populationHost = document.querySelector("#aerial-population");
   if (populationHost && terrain) {
     const share = terrain.excluded_by_either / study.sites_passing_area_and_width;
     populationHost.textContent = `${terrain.excluded_by_either} of ${study.sites_passing_area_and_width.toLocaleString("en-NZ")} (${(share * 100).toFixed(1)}%)`;
   }
-  const width = 760, height = 330, top = 62, left = 40;
-  const barWidth = (width - left * 2) * (bad / review.queued);
-  const excludedWidth = (width - left * 2) * ((check.excluded_total || 0) / review.queued);
-  const flaggedWidth = (width - left * 2) * (((check.excluded_total || 0) + (check.flagged_only_by_coast || 0)) / review.queued);
+
+  const width = 760, height = 330, left = 46, right = 24;
+  const bandTop = 58, bandHeight = 46, gap = 96;
+  const span = width - left - right;
+  const rows = order.map((name, index) => {
+    const card = cards[name];
+    const y = bandTop + index * gap;
+    const bad = card.not_developable, total = card.reviewed;
+    const badWidth = span * (bad / total);
+    const excludedWidth = span * (card.excluded_total / total);
+    const flaggedWidth = span * ((card.excluded_total + card.flagged_only_by_coast) / total);
+    const label = name === "A" ? "A · IN-SAMPLE" : "B · HELD OUT";
+    return `
+    <text class="chart-label" x="${left}" y="${y - 10}">${label} — ${bad} OF ${total} NOT DEVELOPABLE (${(card.false_positive_rate * 100).toFixed(0)}%)</text>
+    <rect x="${left}" y="${y}" width="${span}" height="${bandHeight}" fill="#12343b"/>
+    <rect x="${left}" y="${y}" width="${badWidth}" height="${bandHeight}" fill="#f7c948"/>
+    <rect x="${left}" y="${y + bandHeight - 14}" width="${flaggedWidth}" height="14" fill="#2d6a9f"/>
+    <rect x="${left}" y="${y + bandHeight - 14}" width="${excludedWidth}" height="14" fill="#5bd6b0"/>
+    <text x="${left + 12}" y="${y + 24}" fill="#071113" font-size="17" font-weight="700">${card.excluded_total} excluded · ${card.flagged_only_by_coast} flagged · ${card.neither_excluded_nor_flagged.length} missed</text>`;
+  }).join("");
+
   panel.innerHTML = `<svg viewBox="0 0 ${width} ${height}" aria-hidden="true">
-    <text class="chart-label" x="${left}" y="26">AERIAL REVIEW OF THE ${review.queued} LARGEST DISAGREEMENTS</text>
-    <rect x="${left}" y="${top}" width="${width - left * 2}" height="50" fill="#12343b"/>
-    <rect x="${left}" y="${top}" width="${barWidth}" height="50" fill="#f7c948"/>
-    <text x="${left + 14}" y="${top + 32}" fill="#071113" font-size="21" font-weight="700">${bad} not developable</text>
-    <text x="${width - left - 14}" y="${top + 32}" fill="#a8dbe5" font-size="17" text-anchor="end">${good} genuine</text>
-    <rect x="${left}" y="${top + 62}" width="${width - left * 2}" height="22" fill="#12343b"/>
-    <rect x="${left}" y="${top + 62}" width="${flaggedWidth}" height="22" fill="#2d6a9f"/>
-    <rect x="${left}" y="${top + 62}" width="${excludedWidth}" height="22" fill="#5bd6b0"/>
-    <text class="chart-label" x="${left}" y="${top + 104}">${check.excluded_total} OF THOSE ${bad} EXCLUDED BY S-08 SLOPE OR S-09 WATER · ${check.flagged_only_by_coast} FLAGGED ONLY BY S-10</text>
-    <text class="chart-value" x="${left}" y="${top + 162}" font-size="42">${(review.false_positive_rate * 100).toFixed(0)}%</text>
-    <text class="chart-label" x="${left}" y="${top + 188}">OF THE ROAD PROXY'S WORST DISAGREEMENTS — A DISAGREEMENT-SELECTED SAMPLE,</text>
-    <text class="chart-label" x="${left}" y="${top + 208}">NOT THE CANDIDATE POPULATION</text>
-    <text class="chart-label" x="${left}" y="${top + 244}">COASTAL BARRIER SPIT · WETLAND MARGIN · 14–24° PENINSULA SLOPE · ENCLOSED VALLEY</text>
+    <text class="chart-label" x="${left}" y="26">TWO LABELLED SAMPLES, NEVER POOLED</text>
+    ${rows}
+    <text class="chart-label" x="${left}" y="${bandTop + order.length * gap + 6}">GREEN EXCLUDED BY S-08 SLOPE OR S-09 WATER · BLUE FLAGGED ONLY BY S-10 COAST</text>
+    <text class="chart-label" x="${left}" y="${bandTop + order.length * gap + 30}">SELECTED ON DISAGREEMENT — NEITHER RATE DESCRIBES THE CANDIDATE POPULATION</text>
   </svg>`;
 }
 
