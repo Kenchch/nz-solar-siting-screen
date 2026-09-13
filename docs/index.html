@@ -80,16 +80,28 @@
       <div class="market-grid">
         <div class="candidate-table-wrap">
           <table>
-            <thead><tr><th>Proxy pair</th><th>Rank correlation</th><th>Median rank shift</th><th>Top-50 overlap</th></tr></thead>
+            <thead><tr><th>Voltage tier</th><th>Mapped ways</th><th>Median distance</th><th>Correlation with road distance</th></tr></thead>
             <tbody id="osm-rows"><tr><td colspan="4">Loading real-geometry comparison&hellip;</td></tr></tbody>
           </table>
         </div>
         <aside class="finding">
           <span class="finding-index">01</span>
           <h3>Measured, not illustrated</h3>
-          <p>The demo above runs on twelve rectangles. This runs the same geometric rules on thousands of mapped Canterbury farmland polygons against mapped transmission lines, distribution lines and road centrelines.</p>
-          <p>Distance to a road tracks the low-voltage network, which is everywhere, and says almost nothing about distance to transmission, which is what a utility-scale connection needs.</p>
-          <p class="caveat">OpenStreetMap is not LINZ: completeness varies, and a mapped land-use polygon is not a parcel. One of the top-ranked sites by road proximity turned out on aerial imagery to be a coastal sand spit. &copy; OpenStreetMap contributors, ODbL.</p>
+          <p>The demo above runs on twelve rectangles. This runs the same geometric rules on thousands of mapped Canterbury farmland polygons, against every mapped power line split by <strong>voltage</strong> rather than by OSM tag.</p>
+          <p>A project of tens of megawatts connects at 33&ndash;66 kV. Roads follow the low-voltage poles, so they predict 11 kV proximity reasonably well and say almost nothing about the tier that decides a connection.</p>
+          <p class="caveat">OpenStreetMap is not LINZ: completeness varies and a mapped land-use polygon is not a parcel. &copy; OpenStreetMap contributors, ODbL.</p>
+        </aside>
+      </div>
+      <div class="market-grid">
+        <div class="chart-card">
+          <div id="aerial-panel"></div>
+        </div>
+        <aside class="finding">
+          <span class="finding-index">02</span>
+          <h3>The aerial step is not optional</h3>
+          <p>All twenty of the largest road-versus-connection-tier disagreements were checked against LINZ Basemaps aerial imagery, with the verdict and imagery recorded per site.</p>
+          <p id="aerial-summary">Loading aerial review&hellip;</p>
+          <p class="caveat">None of those failures is a grid problem, and the screen as built catches none of them: S-08 slope is not implemented and there is no coastal-hazard or wetland rule. Aerial imagery &copy; LINZ and Environment Canterbury, CC BY 4.0.</p>
         </aside>
       </div>
     </section>
