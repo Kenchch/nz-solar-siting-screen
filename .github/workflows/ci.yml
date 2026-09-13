@@ -7,6 +7,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Fetch the integration branch for output comparison
+        run: git fetch --no-tags origin main:refs/remotes/origin/main || true
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -14,5 +18,9 @@ jobs:
       - run: pip install -e .[dev]
       - run: pytest
       - run: python scripts/reproduce.py --demo
-      - run: git diff --exit-code -- 'outputs/demo/*.csv' 'outputs/demo/*.json' docs/data.json
+      - run: python scripts/osm_grid_study.py
+      - run: git diff --exit-code -- 'outputs/demo/*.csv' 'outputs/demo/*.json' 'outputs/osm/*.csv' 'outputs/osm/*.json' docs/data.json
       - run: python scripts/verify_reproduced_outputs.py
+      - name: Require an independent baseline on main
+        if: github.ref == 'refs/heads/main'
+        run: python scripts/verify_reproduced_outputs.py --require-independent
