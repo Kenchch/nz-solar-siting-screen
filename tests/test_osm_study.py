@@ -307,3 +307,52 @@ def test_every_labelled_site_has_its_sample_and_its_image():
     assert log["developable"].isin({"yes", "no"}).all()
     for image in log["evidence_image"]:
         assert (ROOT / image).exists(), image
+
+
+# --- the side-by-side grid basis comparison --------------------------------
+
+BASIS = json.loads(
+    (ROOT / "outputs" / "osm" / "grid_basis_comparison.json").read_text(encoding="utf-8")
+)
+
+
+def test_the_bases_are_reported_separately_and_never_merged():
+    """grid_basis only means something if the layers stay apart."""
+    assert "never merge" in BASIS["note"] or "never merged" in BASIS["note"]
+    correlations = BASIS["correlation_with_road_distance"]
+    assert {"topo50_all_lines", "osm_33_66kv", "transpower_110kv_plus"} <= set(correlations)
+    for name, source in BASIS["sources"].items():
+        assert source, name
+
+
+def test_road_usefulness_falls_monotonically_with_voltage():
+    """The ordering is the finding, and it has to survive a rerun."""
+    rho = {
+        name: value["spearman_rho"]
+        for name, value in BASIS["correlation_with_road_distance"].items()
+    }
+    assert rho["osm_22kv_and_below"] > rho["osm_33_66kv"] > rho["osm_110kv_plus"]
+
+
+def test_topo50_behaves_like_a_transmission_layer_not_an_all_voltage_one():
+    """The expectation going in was the opposite, so this pins the actual result."""
+    rho = {
+        name: value["spearman_rho"]
+        for name, value in BASIS["correlation_with_road_distance"].items()
+    }
+    assert rho["topo50_all_lines"] < rho["osm_33_66kv"]
+    assert abs(rho["topo50_all_lines"] - rho["osm_110kv_plus"]) < 0.1
+    assert BASIS["features"]["topo50_all_lines"] < BASIS["features"]["osm_tiers"]["distribution_22kv"]
+
+
+def test_openstreetmap_transmission_recall_is_measured_against_transpower():
+    recall = BASIS["osm_transmission_recall_against_transpower"]
+    assert recall["transpower_length_km"] > 100
+    assert 0.0 < recall["recall"] < 1.0, "a recall of exactly 1 would mean the check did nothing"
+    assert recall["tolerance_m"] > 0
+
+
+def test_the_verify_flags_disagree_enough_to_matter():
+    """If every basis flagged the same sites, the choice of layer would be moot."""
+    for pair, agreement in BASIS["verify_flag_agreement"].items():
+        assert 0.3 < agreement < 0.95, pair
