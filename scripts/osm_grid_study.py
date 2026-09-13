@@ -192,8 +192,9 @@ def main() -> None:
     summary = {
         "source": "OpenStreetMap contributors, ODbL; Canterbury plains extract",
         "scope": (
-            "S-01 area and S-02 width only; land cover, LUC and solar resource "
-            "still require portal-controlled datasets"
+            "S-01 area and S-02 width define the population; S-08 slope and S-09 water "
+            "exclude, S-10 coastal flags. Land cover, LUC class and solar resource still "
+            "require portal-controlled datasets"
         ),
         "crs": "EPSG:2193",
         "farmland_polygons_downloaded": int(len(farmland)),
@@ -260,8 +261,10 @@ def main() -> None:
     ]
     log_path = ROOT / "data" / "aerial_review_log.csv"
     log_columns = [
-        "site_id", "reviewed_on", "reviewer", "imagery", "zoom_level",
-        "evidence_image", "observed_detail", "developable", "finding",
+        "site_id", "reviewed_on", "reviewer", "second_pass_on", "second_pass_result",
+        "author_confirmed_on", "imagery", "zoom_level", "evidence_image",
+        "centroid_to_coastline_m", "centroid_to_water_m",
+        "observed_detail", "developable", "finding",
     ]
     log = pd.read_csv(log_path) if log_path.exists() else pd.DataFrame(columns=log_columns)
     for image in log.get("evidence_image", pd.Series(dtype=str)).dropna():
@@ -275,7 +278,11 @@ def main() -> None:
     # express what the imagery showed, not that they generalise.
     bad = sample["developable"] == "no"
     good = sample["developable"] == "yes"
-    caught = ~sample["terrain_water_pass"] | sample["S10_coastal_flag"]
+    # Excluding a site and flagging it for review are different outcomes, the
+    # same distinction S-05 rests on. A site that only trips the coastal flag
+    # still reaches a human as a candidate, so it is not "caught".
+    excluded = ~sample["terrain_water_pass"]
+    flagged_only = sample["terrain_water_pass"] & sample["S10_coastal_flag"]
     summary["aerial_review"] = {
         "queued": int(len(sample)),
         "reviewed": reviewed,
@@ -287,12 +294,20 @@ def main() -> None:
             "not the candidate population"
         ),
         "in_sample_rule_check": {
-            "caught_by_slope": int((bad & ~sample["S08_slope_pass"]).sum()),
-            "caught_by_water": int((bad & ~sample["S09_water_pass"]).sum()),
-            "caught_by_coastal_flag": int((bad & sample["S10_coastal_flag"]).sum()),
-            "caught_by_any": int((bad & caught).sum()),
-            "missed": sorted(sample.loc[bad & ~caught, "site_id"]),
-            "developable_sites_wrongly_caught": int((good & caught).sum()),
+            "excluded_by_slope": int((bad & ~sample["S08_slope_pass"]).sum()),
+            "excluded_by_water": int((bad & ~sample["S09_water_pass"]).sum()),
+            "excluded_total": int((bad & excluded).sum()),
+            "flagged_only_by_coast": int((bad & flagged_only).sum()),
+            "neither_excluded_nor_flagged": sorted(
+                sample.loc[bad & ~excluded & ~flagged_only, "site_id"]
+            ),
+            "developable_sites_wrongly_excluded": int((good & excluded).sum()),
+            "developable_sites_flagged_only": int((good & flagged_only).sum()),
+        },
+        "second_pass": {
+            "confirmed": int((sample["second_pass_result"] == "confirmed").sum()),
+            "corrected": int((sample["second_pass_result"] == "corrected").sum()),
+            "author_confirmed": int(sample["author_confirmed_on"].notna().sum()),
         },
         "log": log_path.relative_to(ROOT).as_posix(),
     }
@@ -302,7 +317,8 @@ def main() -> None:
         "mean_slope_deg", "water_m", "coastline_m",
         "S08_slope_pass", "S09_water_pass", "S10_coastal_flag",
         "latitude", "longitude", "basemaps_url",
-        "reviewed_on", "reviewer", "imagery", "zoom_level", "evidence_image",
+        "reviewed_on", "reviewer", "second_pass_on", "second_pass_result",
+        "author_confirmed_on", "imagery", "zoom_level", "evidence_image",
         "observed_detail", "developable", "finding",
     ]].round({"area_ha": 1, "latitude": 6, "longitude": 6, "mean_slope_deg": 2}).to_csv(
         output / "aerial_review_queue.csv", index=False

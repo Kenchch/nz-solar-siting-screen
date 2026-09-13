@@ -193,9 +193,35 @@ def test_the_new_rules_catch_the_labelled_failures(summary):
     cannot silently undo it, not that the rules generalise.
     """
     check = summary["aerial_review"]["in_sample_rule_check"]
-    assert check["caught_by_any"] >= 10
-    assert check["developable_sites_wrongly_caught"] == 0
-    assert len(check["missed"]) <= 1
+    assert check["excluded_total"] >= 8
+    assert check["developable_sites_wrongly_excluded"] == 0
+    assert len(check["neither_excluded_nor_flagged"]) <= 1
+
+
+def test_exclusion_and_flagging_are_reported_separately(summary):
+    """A flag is not an exclusion; conflating them would overstate the rules.
+
+    S-10 leaves a site in the candidate set for a human to assess, so a site it
+    only flags has not been caught in the sense S-08 and S-09 catch one.
+    """
+    check = summary["aerial_review"]["in_sample_rule_check"]
+    not_developable = summary["aerial_review"]["not_developable"]
+    assert "excluded_total" in check and "flagged_only_by_coast" in check
+    assert "caught_by_any" not in check
+    accounted = (
+        check["excluded_total"]
+        + check["flagged_only_by_coast"]
+        + len(check["neither_excluded_nor_flagged"])
+    )
+    assert accounted == not_developable
+    assert check["excluded_by_slope"] + check["excluded_by_water"] == check["excluded_total"]
+
+
+def test_the_second_pass_is_recorded(summary):
+    """Both passes are AI passes until a person says otherwise."""
+    second = summary["aerial_review"]["second_pass"]
+    assert second["confirmed"] + second["corrected"] == summary["aerial_review"]["reviewed"]
+    assert second["corrected"] >= 1, "the second pass found and fixed a real error"
 
 
 def test_the_aerial_sample_selection_is_declared(summary):
@@ -214,3 +240,9 @@ def test_every_logged_verdict_cites_an_image_that_exists():
     assert log["observed_detail"].str.len().min() > 80
     # The reviewer field must say who actually made the call.
     assert log["reviewer"].str.contains("AI agent").all()
+    assert log["second_pass_result"].isin({"confirmed", "corrected"}).all()
+
+
+def test_the_scope_field_lists_the_rules_actually_applied(summary):
+    for rule in ("S-01", "S-02", "S-08", "S-09", "S-10"):
+        assert rule in summary["scope"], rule
