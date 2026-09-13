@@ -15,11 +15,24 @@ siting:
     - Short-rotation Cropland
     - Orchard Vineyard or Other Perennial Crop
   grid_distance_review_m: 5000.0
+  # Absolute grid/road rank difference that triggers the verify-grid flag.
+  rank_shift_review: 3
+  # Review-ordering weights. Grid distance is intentionally excluded from the
+  # score and published as distances plus a verify flag instead.
+  screen_score_weights:
+    solar_resource: 0.6
+    area: 0.4
 
 solar:
   latitude_deg: -43.55
   longitude_deg: 172.45
   solar_time_basis: apparent_solar
+  # North-facing fixed-tilt array; 0 degrees is the horizontal-plane proxy.
+  tilt_deg: 25.0
+  tilt_sensitivity_deg:
+    - 0.0
+    - 25.0
+    - 35.0
   target_capacity_factor: 0.175
   shaping_exponent: 1.15
   shaping_exponent_sensitivity:
@@ -31,3 +44,6 @@ solar:
 market:
   node: ISL0661
   timezone: Pacific/Auckland
+  # Real metered grid-exit demand at the same node, used as the M3 control
+  # shape so the capture rate is compared with something other than a flat line.
+  load_control_path: data/derived/ISL0661_load_2019_2025.csv.gz
