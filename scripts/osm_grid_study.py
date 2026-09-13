@@ -10,11 +10,15 @@ extract has 66 kV ways tagged both ``line`` and ``minor_line``, so the tag split
 cuts straight through the tier that matters: a Canterbury project of tens of
 megawatts connects at 33 or 66 kV, not at 220 kV and not to an HVDC pole.
 
-Only the geometric rules that OSM can support are applied - S-01 minimum area
-and S-02 usable width - because land-cover class, LUC class and solar resource
-still need portal-controlled datasets. Read the result as an OSM-based
-measurement, not as a LINZ result: OSM completeness varies by area and a mapped
-land-use polygon is not a parcel title.
+S-01 area and S-02 width define the study population, and the grid statistics
+are reported over it so they stay comparable across runs. The terrain and water
+rules added after the aerial review - S-08 mean slope, S-09 mapped water, S-10
+coastal proximity - are evaluated on the same population and reported beside it,
+including how they score against the twenty hand-labelled sites. Land-cover
+class, LUC class and solar resource still need portal-controlled datasets.
+
+Read the result as an OSM-based measurement, not as a LINZ result: OSM
+completeness varies by area and a mapped land-use polygon is not a parcel title.
 """
 
 from __future__ import annotations
@@ -38,7 +42,7 @@ import yaml
 
 from nz_solar_siting.geometry import area_hectares, has_width_core
 from nz_solar_siting.grid_distance import compare_top_n, nearest_distance_m
-from nz_solar_siting.osm_layers import read_osm_layers, split_by_voltage
+from nz_solar_siting.osm_layers import read_osm_layer, read_osm_layers, split_by_voltage
 from nz_solar_siting.siting import SitingConfig
 
 SHORTLIST_SIZES = (10, 25, 50, 100, 250, 500)
@@ -122,7 +126,8 @@ def main() -> None:
     output = ROOT / arguments.output
     output.mkdir(parents=True, exist_ok=True)
 
-    farmland, powerlines, roads = read_osm_layers(ROOT / "data" / "derived" / "osm")
+    osm_dir = ROOT / "data" / "derived" / "osm"
+    farmland, powerlines, roads, wetland, coastline = read_osm_layers(osm_dir)
     networks, tier_counts = split_by_voltage(
         powerlines, tiers, float(study_config["excluded_voltage_v"])
     )
@@ -154,6 +159,25 @@ def main() -> None:
     # the median shift runs to the hundreds. The shift stays a published column.
     review_distance = float(tiers[connection_tier]["review_distance_m"])
     sites["S06_verify_grid"] = sites[f"{connection_tier}_m"] > review_distance
+
+    # Terrain and water. The aerial review found that none of the screen's worst
+    # false positives was a grid problem: they were steep, wet or coastal, and
+    # the baseline had no rule for any of that.
+    terrain_config = study_config["terrain"]
+    terrain = pd.read_csv(osm_dir / "site_terrain.csv")
+    sites = sites.merge(terrain, on="site_id", how="left", validate="one_to_one")
+    if sites["mean_slope_deg"].isna().any():
+        raise RuntimeError(
+            "site_terrain.csv does not cover every site; rerun scripts/compute_site_terrain.py"
+        )
+    sites["water_m"] = nearest_distance_m(sites, wetland).round(1)
+    sites["coastline_m"] = nearest_distance_m(sites, coastline).round(1)
+    maximum_slope = float(terrain_config["maximum_mean_slope_deg"])
+    coastal_review = float(terrain_config["coastal_review_distance_m"])
+    sites["S08_slope_pass"] = sites["mean_slope_deg"] <= maximum_slope
+    sites["S09_water_pass"] = sites["water_m"] > 0.0
+    sites["S10_coastal_flag"] = sites["coastline_m"] < coastal_review
+    sites["terrain_water_pass"] = sites["S08_slope_pass"] & sites["S09_water_pass"]
 
     sweeps: dict[str, pd.DataFrame] = {}
     for left, right in pairs:
@@ -204,6 +228,16 @@ def main() -> None:
             for name, bounds in tiers.items()
         },
         "verify_grid_flagged": int(sites["S06_verify_grid"].sum()),
+        "terrain_water": {
+            "maximum_mean_slope_deg": maximum_slope,
+            "coastal_review_distance_m": coastal_review,
+            "median_mean_slope_deg": round(float(sites["mean_slope_deg"].median()), 2),
+            "excluded_by_slope": int((~sites["S08_slope_pass"]).sum()),
+            "excluded_by_water": int((~sites["S09_water_pass"]).sum()),
+            "excluded_by_either": int((~sites["terrain_water_pass"]).sum()),
+            "flagged_coastal": int(sites["S10_coastal_flag"].sum()),
+            "surviving_sites": int(sites["terrain_water_pass"].sum()),
+        },
         "top_n_sweep": {pair: sweep.to_dict(orient="records") for pair, sweep in sweeps.items()},
     }
 
@@ -225,25 +259,52 @@ def main() -> None:
         for lat, lon in zip(sample["latitude"], sample["longitude"])
     ]
     log_path = ROOT / "data" / "aerial_review_log.csv"
-    log = pd.read_csv(log_path) if log_path.exists() else pd.DataFrame(
-        columns=["site_id", "reviewed_on", "reviewer", "imagery", "developable", "finding"]
-    )
+    log_columns = [
+        "site_id", "reviewed_on", "reviewer", "imagery", "zoom_level",
+        "evidence_image", "observed_detail", "developable", "finding",
+    ]
+    log = pd.read_csv(log_path) if log_path.exists() else pd.DataFrame(columns=log_columns)
+    for image in log.get("evidence_image", pd.Series(dtype=str)).dropna():
+        if not (ROOT / image).exists():
+            raise FileNotFoundError(f"aerial review log cites missing evidence: {image}")
     sample = sample.merge(log, on="site_id", how="left", validate="one_to_one")
     reviewed = int(sample["finding"].notna().sum())
     not_developable = int((sample["developable"] == "no").sum())
+    # Score the new rules against the hand-labelled sample. These thresholds were
+    # chosen with these labels in view, so this is in-sample: it says the rules
+    # express what the imagery showed, not that they generalise.
+    bad = sample["developable"] == "no"
+    good = sample["developable"] == "yes"
+    caught = ~sample["terrain_water_pass"] | sample["S10_coastal_flag"]
     summary["aerial_review"] = {
         "queued": int(len(sample)),
         "reviewed": reviewed,
         "not_developable": not_developable,
         "false_positive_rate": round(not_developable / reviewed, 3) if reviewed else None,
+        "selection": (
+            "the largest connection-tier-versus-road rank disagreements; selected on "
+            "disagreement, so this rate describes the road proxy's worst cases and "
+            "not the candidate population"
+        ),
+        "in_sample_rule_check": {
+            "caught_by_slope": int((bad & ~sample["S08_slope_pass"]).sum()),
+            "caught_by_water": int((bad & ~sample["S09_water_pass"]).sum()),
+            "caught_by_coastal_flag": int((bad & sample["S10_coastal_flag"]).sum()),
+            "caught_by_any": int((bad & caught).sum()),
+            "missed": sorted(sample.loc[bad & ~caught, "site_id"]),
+            "developable_sites_wrongly_caught": int((good & caught).sum()),
+        },
         "log": log_path.relative_to(ROOT).as_posix(),
     }
     (output / "osm_grid_study.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     sample[[
         "site_id", "area_ha", *proxies, f"{connection_tier}_rank", "road_rank", shift,
+        "mean_slope_deg", "water_m", "coastline_m",
+        "S08_slope_pass", "S09_water_pass", "S10_coastal_flag",
         "latitude", "longitude", "basemaps_url",
-        "reviewed_on", "reviewer", "imagery", "developable", "finding",
-    ]].round({"area_ha": 1, "latitude": 6, "longitude": 6}).to_csv(
+        "reviewed_on", "reviewer", "imagery", "zoom_level", "evidence_image",
+        "observed_detail", "developable", "finding",
+    ]].round({"area_ha": 1, "latitude": 6, "longitude": 6, "mean_slope_deg": 2}).to_csv(
         output / "aerial_review_queue.csv", index=False
     )
 

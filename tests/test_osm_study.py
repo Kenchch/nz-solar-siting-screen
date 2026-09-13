@@ -149,7 +149,68 @@ def test_the_aerial_sample_is_complete_and_carries_its_provenance(summary):
 
 
 def test_layers_load_together_in_the_documented_order():
-    farmland, powerlines, roads = read_osm_layers(OSM_DIR)
+    farmland, powerlines, roads, wetland, coastline = read_osm_layers(OSM_DIR)
     assert set(powerlines["power"].unique()) <= {"line", "minor_line"}
     assert farmland.geometry.geom_type.eq("Polygon").all()
     assert roads.geometry.geom_type.eq("LineString").all()
+    assert wetland.geometry.geom_type.eq("Polygon").all()
+    assert coastline.geometry.geom_type.eq("LineString").all()
+
+
+def test_terrain_layers_are_committed_and_nztm():
+    for name in ("wetland", "coastline"):
+        frame = read_osm_layer(name, OSM_DIR)
+        assert frame.crs.to_epsg() == 2193
+        assert len(frame) > 10
+
+
+def test_every_site_has_a_slope_sample():
+    terrain = pd.read_csv(OSM_DIR / "site_terrain.csv")
+    sites = pd.read_csv(ROOT / "outputs" / "osm" / "osm_grid_distance.csv")
+    assert set(sites["site_id"]) == set(terrain["site_id"])
+    assert (terrain["slope_samples"] > 0).all()
+    assert terrain["mean_slope_deg"].between(0, 90).all()
+
+
+def test_the_plains_are_flat_and_the_peninsula_is_not(summary):
+    """A sanity check on the DEM join: if it were misaligned this would fail."""
+    assert summary["terrain_water"]["median_mean_slope_deg"] < 2.0
+    sites = pd.read_csv(ROOT / "outputs" / "osm" / "osm_grid_distance.csv")
+    assert sites["mean_slope_deg"].max() > 15.0
+
+
+def test_terrain_and_water_rules_exclude_a_minority(summary):
+    terrain = summary["terrain_water"]
+    total = summary["sites_passing_area_and_width"]
+    assert 0 < terrain["excluded_by_either"] / total < 0.2
+    assert terrain["surviving_sites"] + terrain["excluded_by_either"] == total
+
+
+def test_the_new_rules_catch_the_labelled_failures(summary):
+    """In-sample by construction: the thresholds were set with these labels in view.
+
+    The test records what the rules do on the labelled twenty so a later change
+    cannot silently undo it, not that the rules generalise.
+    """
+    check = summary["aerial_review"]["in_sample_rule_check"]
+    assert check["caught_by_any"] >= 10
+    assert check["developable_sites_wrongly_caught"] == 0
+    assert len(check["missed"]) <= 1
+
+
+def test_the_aerial_sample_selection_is_declared(summary):
+    """The 55% is the road proxy's worst cases, not a population rate."""
+    selection = summary["aerial_review"]["selection"]
+    assert "disagreement" in selection
+    assert "not the candidate population" in selection
+
+
+def test_every_logged_verdict_cites_an_image_that_exists():
+    log = pd.read_csv(ROOT / "data" / "aerial_review_log.csv")
+    assert len(log) == 20
+    assert log["zoom_level"].eq(14).all()
+    for image in log["evidence_image"]:
+        assert (ROOT / image).exists(), image
+    assert log["observed_detail"].str.len().min() > 80
+    # The reviewer field must say who actually made the call.
+    assert log["reviewer"].str.contains("AI agent").all()
