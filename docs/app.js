@@ -75,18 +75,60 @@ function renderOsmStudy(study) {
   if (scope) {
     scope.textContent = `${study.sites_passing_area_and_width.toLocaleString("en-NZ")} OSM farmland polygons passing area and width`;
   }
-  const label = pair => pair.replaceAll("_m", "").replace("|", " vs ");
-  host.innerHTML = Object.keys(study.rank_correlation).map(pair => {
-    const sweep = study.top_n_sweep[pair] || [];
-    const top50 = sweep.find(row => row.n === 50);
+  const metres = value => (value >= 1000
+    ? `${(value / 1000).toFixed(1)} km`
+    : `${Math.round(value)} m`);
+  const names = {
+    transmission_110kv_plus: "≥110 kV transmission",
+    subtransmission_33_66kv: "33–66 kV connection tier",
+    distribution_22kv: "≤22 kV distribution",
+  };
+  const tiers = Object.keys(names).filter(tier => study.median_distance_m[`${tier}_m`] !== undefined);
+  const rows = tiers.map(tier => {
+    const correlation = study.rank_correlation[`${tier}_m|road_m`];
+    const highlight = tier === study.connection_tier;
     return `
     <tr>
-      <td><strong>${label(pair)}</strong></td>
-      <td>${study.rank_correlation[pair].toFixed(2)}</td>
-      <td>${study.median_rank_shift[pair].toLocaleString("en-NZ")}</td>
-      <td>${top50 ? top50.jaccard.toFixed(2) : "—"}</td>
+      <td>${highlight ? "<strong>" : ""}${names[tier]}${highlight ? "</strong>" : ""}
+        ${highlight ? "<br><small>what a project actually connects to</small>" : ""}</td>
+      <td>${study.voltage_tier_features[tier].toLocaleString("en-NZ")}</td>
+      <td>${metres(study.median_distance_m[`${tier}_m`])}</td>
+      <td>${correlation.toFixed(2)}</td>
     </tr>`;
-  }).join("");
+  });
+  rows.push(`
+    <tr>
+      <td>Road centrelines</td>
+      <td>${study.road_features.toLocaleString("en-NZ")}</td>
+      <td>${metres(study.median_distance_m.road_m)}</td>
+      <td>—</td>
+    </tr>`);
+  host.innerHTML = rows.join("");
+}
+
+function renderAerial(study) {
+  const panel = document.querySelector("#aerial-panel");
+  const text = document.querySelector("#aerial-summary");
+  const review = study && study.aerial_review;
+  if (!panel || !review) return;
+  const bad = review.not_developable;
+  const good = review.queued - bad;
+  if (text) {
+    text.textContent = `${bad} of the ${review.queued} are not developable land at all — coastal barrier spit, lagoon and wetland margin, or Banks Peninsula slope. The other ${good} are genuine flat plains blocks 7–11 km from the nearest mapped 33–66 kV line with a road along the boundary.`;
+  }
+  const width = 760, height = 330, top = 70, left = 40;
+  const barWidth = (width - left * 2) * (bad / review.queued);
+  panel.innerHTML = `<svg viewBox="0 0 ${width} ${height}" aria-hidden="true">
+    <text class="chart-label" x="${left}" y="30">AERIAL REVIEW OF THE ${review.queued} LARGEST DISAGREEMENTS</text>
+    <rect x="${left}" y="${top}" width="${width - left * 2}" height="54" fill="#12343b"/>
+    <rect x="${left}" y="${top}" width="${barWidth}" height="54" fill="#f7c948"/>
+    <text x="${left + 14}" y="${top + 35}" fill="#071113" font-size="22" font-weight="700">${bad} not developable</text>
+    <text x="${width - left - 14}" y="${top + 35}" fill="#a8dbe5" font-size="18" text-anchor="end">${good} genuine</text>
+    <text class="chart-value" x="${left}" y="${top + 100}" font-size="46">${(review.false_positive_rate * 100).toFixed(0)}%</text>
+    <text class="chart-label" x="${left}" y="${top + 128}">FALSE-POSITIVE RATE OF THE ROAD PROXY'S WORST DISAGREEMENTS</text>
+    <text class="chart-label" x="${left}" y="${top + 172}">COASTAL BARRIER SPIT · LAGOON AND WETLAND MARGIN · BANKS PENINSULA SLOPE</text>
+    <text class="chart-label" x="${left}" y="${top + 196}">NO SLOPE RULE AND NO COASTAL-HAZARD RULE IS IMPLEMENTED IN THE BASELINE</text>
+  </svg>`;
 }
 
 function renderTilt(rows) {
@@ -128,6 +170,7 @@ fetch("data.json")
     renderDecomposition(data.capture_rates);
     renderTilt(data.tilt_sensitivity);
     renderOsmStudy(data.osm_grid_study);
+    renderAerial(data.osm_grid_study);
     const overlapNote = document.querySelector("#grid-overlap-note");
     if (overlapNote && data.osm_grid_study) {
       overlapNote.textContent = `demo n=${data.grid_comparison.n}; see the real-geometry run below`;

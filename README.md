@@ -11,7 +11,7 @@ An auditable Python workflow for utility-scale fixed-tilt PV screening in Canter
 ## Two empirical findings, one method warning
 
 1. **Empirical — generation is not revenue, and the reason is seasonal, not midday cannibalisation.** Official Electricity Authority half-hourly final prices at ISL0661 give apparent-solar-time capture rates from **82.5% to 110.3%** over 2019–2025 for a north-facing 25° array. Five of seven annual values are below 100%; 2019 and 2023 are above it. The worst year is 2024 at **82.5%**, a gap of 17.5 points below the time-average price. The decomposition below attributes **−17.7 points of it to seasonal mismatch**; the intraday term is **+0.2 points**, so the shape of the day actually gave a little value back. The discount is dry-year winter prices arriving when a fixed-tilt array produces least, not midday price suppression.
-2. **Empirical — a road proxy carries almost no information about transmission proximity.** Measured on **2,356 real Canterbury farmland polygons** that pass the area and width rules, using mapped OpenStreetMap networks: the rank correlation between distance-to-transmission and distance-to-road is **0.07**, and the top-50 shortlists produced by the two proxies share **zero sites**. Median distance to a mapped transmission line is **4.0 km**; median distance to a road is **10 m**. This is why both distances and a `verify_grid` flag stay visible and why grid distance was removed from `screen_score` entirely. See [the OSM study](#measuring-the-grid-proxy-disagreement-on-real-geometry) for the caveats, which are substantial.
+2. **Empirical — a road proxy tracks the low-voltage network, not the one a project can connect to.** Measured on **2,356 real Canterbury farmland polygons** that pass the area and width rules, against mapped OpenStreetMap lines split by voltage. Rank correlation with distance-to-road: **0.47** for ≤22 kV distribution, **0.11** for the 33–66 kV tier a Canterbury project actually connects at, **0.04** for ≥110 kV transmission. Roads find the poles that are everywhere and say almost nothing about the connection that matters. This is why both distances and a `verify_grid` flag stay visible and why grid distance was removed from `screen_score` entirely. See [the OSM study](#measuring-the-grid-proxy-disagreement-on-real-geometry) for the caveats, which are substantial.
 3. **Method warning — a single width proxy changes the screening answer.** The 180 m inward-buffer test is the S-02 baseline; `2A/P` remains beside it as an audit comparator. The deterministic geometry stress case is a 200 × 200 m square: the core test passes while `2A/P` reports 100 m and fails. The run manifest reports the number of disagreements instead of hiding this modelling choice.
 
 ## Seasonal or intraday? The capture rate splits exactly
@@ -35,13 +35,21 @@ where `P_d` and `G_d` are day `d`'s mean price and mean output, `cov_d` is the w
 | 2024 | 82.5% | 82.3% | +0.2 | 114.2% |
 | 2025 | 92.2% | 93.9% | −1.7 | 102.2% |
 
-The intraday term is **positive in five of seven years** and averages **+2.5 points**: the modelled solar shape currently earns a small premium *within* the day, because daytime is worth more than the overnight trough and New Zealand has almost no solar on the system yet. Reading these annual numbers as cannibalisation would be wrong. What they show is a seasonal mismatch, and 2024 makes it visible:
+The intraday term is **positive in five of seven years** and averages **+2.5 points**: the modelled solar shape currently earns a small premium *within* the day, because daytime is worth more than the overnight trough and New Zealand has almost no solar on the system yet. Reading these annual numbers as cannibalisation would be wrong.
+
+2019 stands out at **+10.1 points**, four times the period average, and it is worth saying why. The intraday term is the output-weighted within-day price premium divided by the annual mean price, and 2019 had a large numerator over a small denominator. It is the only year in the series whose average midday block was the most expensive part of the day — 126 NZD/MWh at 10:00–16:00 against 121 in the 17:00–21:00 evening and 94 overnight — which gives a solar-weighted premium of **+11.7 NZD/MWh**, the largest in absolute terms of the seven years. It was also the second-cheapest year overall at a 116 NZD/MWh annual mean.
+
+The contrast is 2021 and 2025, where the same calculation returns +0.8 and −1.7 points: their annual means were lifted by scarcity concentrated in the **evening** peak (210 and 169 NZD/MWh at 17:00–21:00, against 166 and 152 at midday), which a solar shape cannot reach. So 2019 is a statement about the shape of that year's day, not a sign that solar earns a premium.
+
+What the series shows is a seasonal mismatch, and 2024 makes it visible:
 
 ![Seasonal mismatch at ISL0661 in 2024](outputs/demo/figures/seasonal_mismatch.png)
 
 August 2024 averaged **520 NZD/MWh** during the gas and hydro squeeze while the modelled array delivered 6.6% of its annual output; December averaged **21 NZD/MWh** against 11.6% of output. The 2024 half-hourly averages have no material midday trough at all — the cheapest hours of that year were overnight, not at noon.
 
-**This will change.** The intraday term is the one that grows more negative as PV penetration rises, and it is the right thing to forecast. The seasonal term is the one that is already large and is a hedging and technology-choice question (tilt, east–west orientation, storage) rather than a penetration question.
+The December collapse is worth reading carefully, because it is the seasonal term's future in miniature. A 21 NZD/MWh monthly average is not a solar effect: it is a wet spring filling the South Island lakes into a low-demand month, so hydro spills and the market clears near zero for weeks. Summer is already the cheapest part of this market before any material PV exists. **Adding solar makes the seasonal term worse, not just the intraday one** — new summer-peaking capacity arrives in the months that are already oversupplied, deepening exactly the months where a fixed-tilt array puts most of its energy. A penetration forecast that only models midday cannibalisation will miss the larger half of the effect.
+
+The two terms therefore call for different responses. The intraday term is a penetration question and the thing to forecast half-hourly. The seasonal term is a technology and contracting question — tilt, east–west orientation, storage duration, and how much winter-weighted hedge sits behind the asset.
 
 ### Control group: the real load shape at the same node
 
@@ -102,31 +110,54 @@ The 26 UTC rows dated 2018-12-31 are the first 13 NZDT hours of market year 2019
 
 ## Measuring the grid-proxy disagreement on real geometry
 
-The demo run answers "does the code work" on twelve deterministic rectangles; a Jaccard index on n = 4 is not evidence about anything. LINZ Topo50 and LCDB both need portal accounts, so `scripts/osm_grid_study.py` runs the same comparison on an open substitute with real geometry: **9,102 OpenStreetMap farmland polygons** in the Canterbury plains, of which **2,356 pass S-01 (20 ha) and S-02 (180 m width core)**, against **203 mapped transmission lines**, **6,535 distribution lines** and **21,842 road centrelines**.
+The demo run answers "does the code work" on twelve deterministic rectangles; a Jaccard index on n = 4 is not evidence about anything. LINZ Topo50 and LCDB both need portal accounts, so `scripts/osm_grid_study.py` runs the same comparison on an open substitute with real geometry: **9,102 OpenStreetMap farmland polygons** in the Canterbury plains, of which **2,356 pass S-01 (20 ha) and S-02 (180 m width core)**, against **21,842 road centrelines** and every mapped power line in the extract.
 
 Only the two geometric rules are applied. Land-cover class, LUC class and solar resource still need LRIS, so this is a grid-distance study, not a screening run.
 
+### Split the network by voltage, not by OSM tag
+
+An earlier version of this study split power lines by their OSM `power` tag, which is the wrong cut. The tag separates 131 ways tagged `line` at 66 kV from 158 ways tagged `minor_line` at the same 66 kV, while lumping 220 kV transmission and 350 kV HVDC in with the first group. A Canterbury project of tens of megawatts connects at **33 or 66 kV**. It does not connect to an HVDC pole, and a 220 kV connection is a different project with a different budget. Tiering by voltage puts each way where the engineering puts it; ways tagged with two circuits such as `66000;11000` take the higher one, HVDC is dropped outright, and the 994 untagged ways are reported rather than silently assigned.
+
+| Voltage tier | Mapped ways | Median distance | 90th percentile | Rank correlation with road distance |
+|---|---:|---:|---:|---:|
+| ≥110 kV transmission | 65 | 4,864 m | 15,055 m | **0.04** |
+| **33–66 kV (connection tier)** | **541** | **1,687 m** | **6,066 m** | **0.11** |
+| ≤22 kV distribution | 5,134 | 13 m | 548 m | **0.47** |
+| road centrelines | 21,842 | 10 m | 450 m | — |
+
 ![Grid proxy disagreement on OSM Canterbury geometry](outputs/osm/osm_grid_disagreement.png)
 
-| Proxy pair | Rank correlation | Median rank shift (of 2,356) | Top-50 Jaccard |
-|---|---:|---:|---:|
-| transmission vs road | 0.07 | 638 | 0.00 |
-| transmission vs distribution | 0.10 | 671 | 0.09 |
-| distribution vs road | 0.49 | 393 | 0.02 |
+The ordering is the finding, and it is monotonic in voltage. A road centreline is a decent stand-in for the low-voltage network — of course it is, the poles follow the road. It is almost useless for the 33–66 kV tier a project would actually connect to: a rank correlation of 0.11 means road proximity explains about **1%** of the variance in connection-tier proximity, and the two top-50 shortlists share no sites at all. The 33–66 kV tier is also not a stand-in for transmission (correlation 0.31 between those two), so there is no single "distance to the grid" number to put in a score.
 
-Median distance to a mapped transmission line is **4,029 m**; to a distribution line, **5.9 m**; to a road, **10.1 m**. Read together: a road centreline is a reasonable stand-in for the *low-voltage* network, which is everywhere, and tells you essentially nothing about proximity to *transmission*, which is what a utility-scale connection actually needs. A composite score that mixes these two is not measuring one quantity.
+**If you take one sentence to an interview:** on real Canterbury geometry, distance to a road predicts distance to 33–66 kV at ρ = 0.11 — statistically indistinguishable from picking sites at random — while predicting distance to 11 kV at ρ = 0.47.
 
-The `S06_verify_grid` flag fires on **2,347 of 2,356** sites here, because the 5 km threshold was calibrated against a Topo50-style layer rather than a transmission-only layer. That is a finding about the threshold, not a screening result: the threshold has to be re-set per network layer, which is another argument for a visible flag over a hidden weight.
+### The verify flag had to be re-cut too
 
-### Aerial review
+`S06_verify_grid` originally fired when *any* proxy distance exceeded 5 km, or the rank shift reached 3. Applied to these columns that rule flags **2,348 of 2,356 sites**, and the notebook recomputes it beside the new one — a flag that fires on everything carries no information. It now tests one thing: distance to the connection tier against that tier's own review distance, which is configured per tier in `config/assumptions.yml`. At 5 km from 33–66 kV it flags **372 of 2,356 (15.8%)**, which is a queue a person can actually work through.
 
-Three of the twenty largest disagreements were checked against LINZ Basemaps aerial imagery and logged in [`data/aerial_review_log.csv`](data/aerial_review_log.csv); the remaining seventeen are queued with coordinates and a deep link in `outputs/osm/aerial_review_queue.csv`. The most useful of the three: the polygon the **road proxy ranks first** turns out to be a **coastal sand spit** tagged `landuse=meadow` — bare gravel and dune with a formed track along it, not developable land at all. Two others are genuine irrigated plains blocks crossed by a transmission corridor with the nearest mapped road 0.9–1.8 km away, because rural Canterbury roads sit on a roughly 1 km grid.
+The absolute rank-shift trigger was dropped from the flag entirely. `rank_shift_review = 3` was chosen against eight demo fixtures; at n = 2,356 the median shift is 646, so the same constant fires on essentially every site. Rank thresholds expressed in ranks do not transfer across sample sizes. The shift stays published as a column, and it still selects the aerial review queue.
+
+### Aerial review: 55% of the worst disagreements are not developable land
+
+All twenty of the largest connection-tier-versus-road disagreements were checked against LINZ Basemaps aerial imagery and logged in [`data/aerial_review_log.csv`](data/aerial_review_log.csv) with a date, the imagery used, a yes/no verdict and a note.
+
+**Eleven of the twenty are not developable land at all.** They fall into three groups, and none of them is a grid problem:
+
+| Group | Sites | What the imagery shows |
+|---|---:|---|
+| Coastal barrier spit | 5 | Gravel, dune and lagoon-margin flats on a narrow barrier between a lagoon and the open coast; one is bare dune with a formed track. |
+| Lagoon and wetland margin | 1 | Low-lying marsh at the lake edge with standing water inside the polygon. |
+| Banks Peninsula slope | 5 | Steep coastal hillsides, cliffed headlands and enclosed bay-head valleys. |
+
+The other nine are genuine flat plains blocks — centre-pivot cropping and improved pasture — that sit 7–11 km from the nearest mapped 33–66 kV line while a road runs along the boundary. Those are the real disagreements, and they are the ones worth a connection enquiry.
+
+The false-positive rate is the useful number: **the road proxy's top disagreements are wrong about the land 55% of the time**, and the screen as built cannot catch any of them. S-08 slope is documented as not implemented, and there is no coastal-hazard or wetland rule at all. That is a concrete answer to "what is your screen missing" — it is missing terrain and it is missing water.
 
 ### What this is not
 
-- **OpenStreetMap is not LINZ.** Completeness varies by area and contributor. `power=minor_line` is not the same population as the LINZ powerline layer, and the absence of a mapped line is not evidence that no line exists.
-- **A land-use polygon is not a parcel.** The sand-spit case above is the proof. Real screening needs LCDB or cadastral polygons.
-- **Still missing, and still blocked on credentials:** the LINZ Topo50 and LCDB versions of this same run, and the remaining seventeen aerial checks. Nothing here should be quoted as a LINZ result.
+- **OpenStreetMap is not LINZ.** Completeness varies by area and contributor; 994 mapped ways carry no voltage tag at all and sit in none of the tiers. The absence of a mapped line is not evidence that no line exists.
+- **A land-use polygon is not a parcel.** Eleven of twenty says so. Real screening needs LCDB or cadastral polygons.
+- **Still missing, and still blocked on credentials:** the LINZ Topo50 and LCDB versions of this same run. Nothing here should be quoted as a LINZ result.
 
 Attribution: © OpenStreetMap contributors, ODbL 1.0. Aerial imagery © LINZ and Environment Canterbury, CC BY 4.0.
 
@@ -199,7 +230,7 @@ On Windows use `.venv/Scripts/` in place of `.venv/bin/`. Both runs read only co
 
 ## Notebooks
 
-- [`notebooks/01_grid_distance_comparison.ipynb`](notebooks/01_grid_distance_comparison.ipynb) — sweeps the top-N overlap on the demo fixtures, re-derives the verify-grid flag from the published distances, demonstrates that moving the powerline layer does not move `screen_score`, and then repeats the comparison on the 2,356 real OSM polygons so the difference between an illustration and a measurement is visible in one place.
+- [`notebooks/01_grid_distance_comparison.ipynb`](notebooks/01_grid_distance_comparison.ipynb) — sweeps the top-N overlap on the demo fixtures, re-derives the verify-grid flag from the published distances, demonstrates that moving the powerline layer does not move `screen_score`, and then repeats the comparison on the 2,356 real OSM polygons by voltage tier, ending on the aerial verdicts.
 - [`notebooks/02_capture_rate.ipynb`](notebooks/02_capture_rate.ipynb) — takes the capture rate apart into seasonal and intraday terms, puts the worst year's monthly and hourly price shapes side by side, runs the metered load control, and re-derives the tilt sensitivity.
 
 Both are executed top to bottom by `tests/test_notebooks.py`, so they cannot quietly rot back into two cells that read a CSV.
@@ -218,7 +249,7 @@ Both are executed top to bottom by `tests/test_notebooks.py`, so they cannot qui
 - `outputs/demo/market_year_accounting.csv` — UTC-year and NZ-market-year row reconciliation
 - `outputs/demo/run_manifest.json` and `findings.json` — machine-readable provenance and dashboard payload
 - `outputs/osm/osm_grid_distance.csv` and `osm_grid_study.json` — the real-geometry grid-proxy comparison over 2,356 OSM farmland polygons
-- `outputs/osm/aerial_review_queue.csv` — the twenty largest disagreements with coordinates, a LINZ Basemaps link and the review findings recorded so far
+- `outputs/osm/aerial_review_queue.csv` — the twenty largest disagreements with coordinates, a LINZ Basemaps link and the completed aerial verdicts
 - `outputs/osm/osm_grid_disagreement.png` — proxy scatter and the top-N agreement sweep
 
 ## Demo versus real data
@@ -231,7 +262,7 @@ The market series are different: both the ISL0661 half-hourly final prices and t
 
 ## Validation
 
-Sixty-five automated tests cover the CRS gate, exclusion and flag rules, both width methods, spatial-indexed nearest distance, the reject-rate gate, the configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry against the horizontal-plane limit, the seasonal/intraday identity and its two synthetic edge cases, the metered load control, output-shape sensitivity, zero-output rejection, the flat-output invariant, agreement between `config/assumptions.yml` and the code defaults, the CRS gate on the committed OSM layers, the published OSM rank-correlation and top-N claims, the aerial review queue's coordinates and provenance fields, and top-to-bottom execution of both notebooks.
+Seventy-four automated tests cover the CRS gate, exclusion and flag rules, both width methods, spatial-indexed nearest distance, the reject-rate gate, the configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry against the horizontal-plane limit, the seasonal/intraday identity and its two synthetic edge cases, the metered load control, output-shape sensitivity, zero-output rejection, the flat-output invariant, agreement between `config/assumptions.yml` and the code defaults, the CRS gate on the committed OSM layers, voltage parsing of shared-circuit tags, that the voltage tiers partition every mapped line exactly once, that a 66 kV way is tiered by voltage rather than by its OSM tag, the published rank-correlation ordering across tiers, that the verify flag discriminates instead of firing on everything, the aerial review's completeness and provenance fields, and top-to-bottom execution of both notebooks.
 
 GitHub Actions runs the complete demo pipeline. It strictly diffs CSV/JSON; because GeoPackage and PNG bytes vary across operating systems, `scripts/verify_reproduced_outputs.py` compares GeoPackages by fields and geometry and applies a bounded pixel-difference check to figures. That script compares against `origin/main` for any output the branch has not changed, so a branch cannot grade its own artifacts; where an output was intentionally changed it says so and falls back to a determinism-only comparison against `HEAD`.
 
