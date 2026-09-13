@@ -8,3 +8,4 @@ __pycache__/
 data/raw/*
 !data/raw/.gitkeep
 outputs/runtime/
+data/raw/copernicus_dem/

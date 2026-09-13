@@ -15,7 +15,11 @@ siting:
     - Short-rotation Cropland
     - Orchard Vineyard or Other Perennial Crop
   grid_distance_review_m: 5000.0
-  # Absolute grid/road rank difference that triggers the verify-grid flag.
+  # Absolute grid/road rank difference that triggers the verify-grid flag on the
+  # demo path only. It is a count of ranks, so it does not transfer between
+  # sample sizes: 3 is meaningful across eight demo fixtures and fires on
+  # essentially every site at n = 2,356. The OSM study deliberately does not use
+  # it; see osm_study below.
   rank_shift_review: 3
   # Review-ordering weights. Grid distance is intentionally excluded from the
   # score and published as distances plus a verify flag instead.
@@ -46,6 +50,19 @@ solar:
 # record: a Canterbury project of tens of megawatts connects at 33 or 66 kV, not
 # at 220 kV and certainly not to an HVDC pole.
 osm_study:
+  # Terrain and water rules, added after an aerial review of the twenty largest
+  # grid-proxy disagreements found that eleven were not developable land and
+  # none of those failures was a grid problem. Thresholds were chosen with those
+  # twenty labels in view, so the quoted hit rate is in-sample.
+  terrain:
+    # S-08: mean slope over the polygon, Copernicus GLO-30. 10 degrees is well
+    # past the point where fixed-tilt racking needs terrain-following or
+    # earthworks; it is an exclusion, not a preference.
+    maximum_mean_slope_deg: 10.0
+    # S-10: coastal hazard review. Not an exclusion - coastal land is not
+    # automatically undevelopable - but a 30-year asset within a kilometre of an
+    # open coast needs an erosion and inundation assessment before anything else.
+    coastal_review_distance_m: 1000.0
   excluded_voltage_v: 350000
   connection_tier: subtransmission_33_66kv
   voltage_tiers:
