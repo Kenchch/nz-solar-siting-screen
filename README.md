@@ -8,11 +8,12 @@ An auditable Python workflow for utility-scale fixed-tilt PV screening in Canter
 
 ![Where the capture-rate gap comes from](outputs/demo/figures/capture_rate_decomposition.png)
 
-## Two empirical findings, one method warning
+## Two empirical findings, two method warnings
 
 1. **Empirical — generation is not revenue, and the reason is seasonal, not midday cannibalisation.** Official Electricity Authority half-hourly final prices at ISL0661 give apparent-solar-time capture rates from **82.5% to 110.3%** over 2019–2025 for a north-facing 25° array. Five of seven annual values are below 100%; 2019 and 2023 are above it. The worst year is 2024 at **82.5%**, a gap of 17.5 points below the time-average price. The decomposition below attributes **−17.7 points of it to seasonal mismatch**; the intraday term is **+0.2 points**, so the shape of the day actually gave a little value back. The discount is dry-year winter prices arriving when a fixed-tilt array produces least, not midday price suppression.
 2. **Empirical — a road proxy tracks the low-voltage network, not the one a project can connect to.** Measured on **2,356 real Canterbury farmland polygons** that pass the area and width rules, against mapped OpenStreetMap lines split by voltage. Rank correlation with distance-to-road: **0.47** for ≤22 kV distribution, **0.11** for the 33–66 kV tier a Canterbury project actually connects at, **0.04** for ≥110 kV transmission. Roads find the poles that are everywhere and say almost nothing about the connection that matters. This is why both distances and a `verify_grid` flag stay visible and why grid distance was removed from `screen_score` entirely. See [the OSM study](#measuring-the-grid-proxy-disagreement-on-real-geometry) for the caveats, which are substantial.
-3. **Method warning — a single width proxy changes the screening answer.** The 180 m inward-buffer test is the S-02 baseline; `2A/P` remains beside it as an audit comparator. The deterministic geometry stress case is a 200 × 200 m square: the core test passes while `2A/P` reports 100 m and fails. The run manifest reports the number of disagreements instead of hiding this modelling choice.
+3. **Method warning — the screen was missing terrain and water, and an aerial check is what found it.** Of the twenty largest grid-proxy disagreements, **11 are not developable land at all** — coastal barrier spit, wetland margin, or 14–24° peninsula slope. None is a grid problem. S-08 slope was documented as "not implemented" and there was no water or coastal rule at all; all three now exist, built from free inputs, and they catch 10 of those 11. That sample was selected on disagreement, so the 55% is the road proxy's worst cases, not a population rate.
+4. **Method warning — a single width proxy changes the screening answer.** The 180 m inward-buffer test is the S-02 baseline; `2A/P` remains beside it as an audit comparator. The deterministic geometry stress case is a 200 × 200 m square: the core test passes while `2A/P` reports 100 m and fails. The run manifest reports the number of disagreements instead of hiding this modelling choice.
 
 ## Seasonal or intraday? The capture rate splits exactly
 
@@ -137,21 +138,44 @@ The ordering is the finding, and it is monotonic in voltage. A road centreline i
 
 The absolute rank-shift trigger was dropped from the flag entirely. `rank_shift_review = 3` was chosen against eight demo fixtures; at n = 2,356 the median shift is 646, so the same constant fires on essentially every site. Rank thresholds expressed in ranks do not transfer across sample sizes. The shift stays published as a column, and it still selects the aerial review queue.
 
-### Aerial review: 55% of the worst disagreements are not developable land
+### Aerial review: 11 of the 20 worst disagreements are not developable land
 
-All twenty of the largest connection-tier-versus-road disagreements were checked against LINZ Basemaps aerial imagery and logged in [`data/aerial_review_log.csv`](data/aerial_review_log.csv) with a date, the imagery used, a yes/no verdict and a note.
+All twenty of the largest connection-tier-versus-road disagreements were checked against LINZ Basemaps aerial imagery. Every verdict in [`data/aerial_review_log.csv`](data/aerial_review_log.csv) carries the date, the imagery and zoom used, **the image it was written from** (committed under [`data/aerial/`](data/aerial/)), and an `observed_detail` naming something visible in that image — an aircraft parked on a grass airstrip, a sand island in the lagoon, the distance to a surf line. A reader can open the picture and contradict the verdict; that is the point.
 
-**Eleven of the twenty are not developable land at all.** They fall into three groups, and none of them is a grid problem:
+> **Who reviewed these.** The verdicts were made by an AI agent (Claude Opus 5) working in the repository author's session, from the committed images. No person has independently confirmed them, and the log's `reviewer` column says so. Treat them as a documented first pass, not as a signed-off site assessment.
+
+**Eleven of the twenty are not developable land at all**, and none of the failures is a grid problem:
 
 | Group | Sites | What the imagery shows |
 |---|---:|---|
-| Coastal barrier spit | 5 | Gravel, dune and lagoon-margin flats on a narrow barrier between a lagoon and the open coast; one is bare dune with a formed track. |
+| Coastal barrier spit | 5 | Gravel, dune and lagoon-margin flats between a lagoon and the open coast; one is bare dune with a formed track along it. |
 | Lagoon and wetland margin | 1 | Low-lying marsh at the lake edge with standing water inside the polygon. |
-| Banks Peninsula slope | 5 | Steep coastal hillsides, cliffed headlands and enclosed bay-head valleys. |
+| Peninsula slope | 4 | Steep coastal hillsides and cliffed headlands; measured mean slope 14–24°. |
+| Enclosed valley floor | 1 | Flat (3.5° mean) but boxed in by steep slopes behind a settlement, under 400 m wide. |
 
-The other nine are genuine flat plains blocks — centre-pivot cropping and improved pasture — that sit 7–11 km from the nearest mapped 33–66 kV line while a road runs along the boundary. Those are the real disagreements, and they are the ones worth a connection enquiry.
+The last row is a correction the data made to an eyeball grouping: five of these sites looked like "peninsula slope" in the imagery, but once slope was actually measured, one of them is a flat valley floor that fails for enclosure and size rather than gradient. It is the kind of thing a rule catches and an impression does not.
 
-The false-positive rate is the useful number: **the road proxy's top disagreements are wrong about the land 55% of the time**, and the screen as built cannot catch any of them. S-08 slope is documented as not implemented, and there is no coastal-hazard or wetland rule at all. That is a concrete answer to "what is your screen missing" — it is missing terrain and it is missing water.
+The other nine are genuine flat plains blocks — centre-pivot cropping and improved pasture — sitting 7–11 km from the nearest mapped 33–66 kV line while a road runs along the boundary. Those are the real disagreements, and the ones worth a connection enquiry.
+
+> **What the 55% is and is not.** These twenty were selected *because* they are the largest disagreements, which biases the sample towards coast and peninsula edges. **55% is the false-positive rate of the road proxy's worst cases, not of the candidate population.** The honest population statement is the one below: the new terrain and water rules exclude 206 of 2,356 sites, or 8.7%.
+
+### Closing the gap: S-08 slope, S-09 water, S-10 coastal
+
+The review said the screen was missing terrain and water, so the screen now has terrain and water. All three inputs are free and need no account.
+
+| Rule | Input | Threshold | Effect on the 2,356 |
+|---|---|---|---:|
+| **S-08** mean slope | Copernicus GLO-30 DEM | exclude above 10° mean over the polygon | 113 excluded |
+| **S-09** mapped water | OSM `natural=water`/`wetland`, `landuse=basin` | exclude on any intersection | 106 excluded |
+| **S-10** coastal proximity | OSM `natural=coastline` | flag within 1,000 m | 133 flagged |
+
+Median mean slope across the study population is 0.77° — it is the Canterbury plains — and 206 sites (8.7%) fail S-08 or S-09. `scripts/compute_site_terrain.py` downloads the DEM tiles and writes a committed per-site slope table, so the screening run itself needs no raster and no network.
+
+Scored against the twenty labelled sites: **10 of the 11 non-developable sites are caught, and none of the 9 developable ones is.** Slope catches 4, mapped water catches 4, the coastal flag catches 7, overlapping.
+
+> **This is in-sample.** The thresholds were chosen with those twenty labels in view. The number says the rules express what the imagery showed; it is not an accuracy claim on unseen sites, and it should not be quoted as one.
+
+The single miss is instructive. It is a flat 312 ha barrier-spit polygon whose nearest mapped coastline is 1.3 km away, because the barrier is wide at that point. No simple setback reaches it — catching it needs a barrier-landform test or real land cover, and inventing a threshold that happens to capture this one site would be fitting the sample rather than screening. It is left uncaught and named.
 
 ### What this is not
 
@@ -172,7 +196,9 @@ Attribution: © OpenStreetMap contributors, ODbL 1.0. Aerial imagery © LINZ and
 | S-05 highly productive land | **Flag** | LUC 1–3 → consenting review; never automatic exclusion |
 | S-06 grid proximity | **Flag + published distances** | both distances, both ranks and rank shift retained; **excluded from `screen_score`** |
 | S-07 solar resource | Rank | higher LENZ mean annual solar radiation ranks better |
-| S-08 slope | Optional | not in baseline; requires DEM processing |
+| S-08 mean slope | Exclude | mean slope over the polygon above 10°, from Copernicus GLO-30 |
+| S-09 mapped water | Exclude | any intersection with mapped standing water or wetland |
+| S-10 coastal proximity | **Flag** | within 1,000 m of the open coast → hazard review |
 
 Excluded records are written to `quarantine.gpkg` with the rule IDs that removed them. A configurable reject-rate gate aborts output when a batch looks more like a wrong input or CRS than a plausible screen.
 
@@ -226,7 +252,7 @@ python -m venv .venv
 .venv/bin/python -m pytest
 ```
 
-On Windows use `.venv/Scripts/` in place of `.venv/bin/`. Both runs read only committed inputs, so neither needs network access. To refresh those inputs, run `scripts/download_ea_prices.py`, `scripts/download_ea_load.py` and `scripts/download_osm_networks.py`; LRIS and LINZ exports require the accounts/API keys described in [data/README.md](data/README.md).
+On Windows use `.venv/Scripts/` in place of `.venv/bin/`. Both runs read only committed inputs, so neither needs network access. To refresh those inputs, run `scripts/download_ea_prices.py`, `scripts/download_ea_load.py`, `scripts/download_osm_networks.py` and `scripts/compute_site_terrain.py`; the last of these downloads about 90 MB of Copernicus DEM tiles, which is why its output is committed as a small per-site table and it is not part of CI. LRIS and LINZ exports require the accounts/API keys described in [data/README.md](data/README.md).
 
 ## Notebooks
 
@@ -249,7 +275,9 @@ Both are executed top to bottom by `tests/test_notebooks.py`, so they cannot qui
 - `outputs/demo/market_year_accounting.csv` — UTC-year and NZ-market-year row reconciliation
 - `outputs/demo/run_manifest.json` and `findings.json` — machine-readable provenance and dashboard payload
 - `outputs/osm/osm_grid_distance.csv` and `osm_grid_study.json` — the real-geometry grid-proxy comparison over 2,356 OSM farmland polygons
-- `outputs/osm/aerial_review_queue.csv` — the twenty largest disagreements with coordinates, a LINZ Basemaps link and the completed aerial verdicts
+- `outputs/osm/aerial_review_queue.csv` — the twenty largest disagreements with coordinates, a LINZ Basemaps link, the terrain and water columns, and the completed aerial verdicts
+- `data/aerial/` — the imagery each verdict was written from, one file per reviewed site
+- `data/derived/osm/site_terrain.csv` — per-site mean and p90 slope from Copernicus GLO-30
 - `outputs/osm/osm_grid_disagreement.png` — proxy scatter and the top-N agreement sweep
 
 ## Demo versus real data
@@ -262,10 +290,10 @@ The market series are different: both the ISL0661 half-hourly final prices and t
 
 ## Validation
 
-Seventy-four automated tests cover the CRS gate, exclusion and flag rules, both width methods, spatial-indexed nearest distance, the reject-rate gate, the configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry against the horizontal-plane limit, the seasonal/intraday identity and its two synthetic edge cases, the metered load control, output-shape sensitivity, zero-output rejection, the flat-output invariant, agreement between `config/assumptions.yml` and the code defaults, the CRS gate on the committed OSM layers, voltage parsing of shared-circuit tags, that the voltage tiers partition every mapped line exactly once, that a 66 kV way is tiered by voltage rather than by its OSM tag, the published rank-correlation ordering across tiers, that the verify flag discriminates instead of firing on everything, the aerial review's completeness and provenance fields, and top-to-bottom execution of both notebooks.
+Eighty-three automated tests cover the CRS gate, exclusion and flag rules, both width methods, spatial-indexed nearest distance, the reject-rate gate, the configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry against the horizontal-plane limit, the seasonal/intraday identity and its two synthetic edge cases, the metered load control, output-shape sensitivity, zero-output rejection, the flat-output invariant, agreement between `config/assumptions.yml` and the code defaults, the CRS gate on the committed OSM layers, voltage parsing of shared-circuit tags, that the voltage tiers partition every mapped line exactly once, that a 66 kV way is tiered by voltage rather than by its OSM tag, the published rank-correlation ordering across tiers, that the verify flag discriminates instead of firing on everything, the aerial review's completeness and provenance fields, that every logged verdict cites an image that exists on disk, that the DEM join puts the plains under 2° and the peninsula above 15°, the terrain and water exclusion shares, the in-sample rule check against the labelled twenty, and top-to-bottom execution of both notebooks.
 
 GitHub Actions runs the complete demo pipeline. It strictly diffs CSV/JSON; because GeoPackage and PNG bytes vary across operating systems, `scripts/verify_reproduced_outputs.py` compares GeoPackages by fields and geometry and applies a bounded pixel-difference check to figures. That script compares against `origin/main` for any output the branch has not changed, so a branch cannot grade its own artifacts; where an output was intentionally changed it says so and falls back to a determinism-only comparison against `HEAD`.
 
 ## Licence and attribution
 
-Code is MIT licensed. Source datasets retain their publishers' licences and attribution requirements. The committed OpenStreetMap extract in `data/derived/osm/` and everything derived from it in `outputs/osm/` are © OpenStreetMap contributors under the **ODbL 1.0**. Do not redistribute LRIS, LINZ, DOC or Electricity Authority source files without checking the applicable item terms.
+Code is MIT licensed. Source datasets retain their publishers' licences and attribution requirements. The committed OpenStreetMap extract in `data/derived/osm/` and everything derived from it in `outputs/osm/` are © OpenStreetMap contributors under the **ODbL 1.0**. The aerial images in `data/aerial/` are © LINZ and Environment Canterbury, **CC BY 4.0**, redistributed to evidence the review. Elevation is derived from the **Copernicus GLO-30 DEM**, © European Union / ESA, under its free and open licence. Do not redistribute LRIS, LINZ, DOC or Electricity Authority source files without checking the applicable item terms.

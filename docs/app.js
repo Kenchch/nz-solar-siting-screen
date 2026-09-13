@@ -114,20 +114,35 @@ function renderAerial(study) {
   const bad = review.not_developable;
   const good = review.queued - bad;
   if (text) {
-    text.textContent = `${bad} of the ${review.queued} are not developable land at all — coastal barrier spit, lagoon and wetland margin, or Banks Peninsula slope. The other ${good} are genuine flat plains blocks 7–11 km from the nearest mapped 33–66 kV line with a road along the boundary.`;
+    text.textContent = `${bad} of the ${review.queued} are not developable land at all — five on a coastal barrier spit, one on a wetland margin, four on 14–24° peninsula slope and one flat but boxed in by steep ground. The other ${good} are genuine flat plains blocks 7–11 km from the nearest mapped 33–66 kV line with a road along the boundary.`;
   }
-  const width = 760, height = 330, top = 70, left = 40;
+  const check = review.in_sample_rule_check || {};
+  const terrain = study.terrain_water;
+  const rulesHost = document.querySelector("#aerial-rules");
+  if (rulesHost && check.caught_by_any !== undefined) {
+    rulesHost.textContent = `The three rules added afterwards — mean slope from a free DEM, mapped water, and a coastal proximity flag — catch ${check.caught_by_any} of those ${bad}, and wrongly catch ${check.developable_sites_wrongly_caught} of the ${good} genuine sites.`;
+  }
+  const populationHost = document.querySelector("#aerial-population");
+  if (populationHost && terrain) {
+    const share = terrain.excluded_by_either / study.sites_passing_area_and_width;
+    populationHost.textContent = `${terrain.excluded_by_either} of ${study.sites_passing_area_and_width.toLocaleString("en-NZ")} (${(share * 100).toFixed(1)}%)`;
+  }
+  const width = 760, height = 330, top = 62, left = 40;
   const barWidth = (width - left * 2) * (bad / review.queued);
+  const caughtWidth = (width - left * 2) * ((check.caught_by_any || 0) / review.queued);
   panel.innerHTML = `<svg viewBox="0 0 ${width} ${height}" aria-hidden="true">
-    <text class="chart-label" x="${left}" y="30">AERIAL REVIEW OF THE ${review.queued} LARGEST DISAGREEMENTS</text>
-    <rect x="${left}" y="${top}" width="${width - left * 2}" height="54" fill="#12343b"/>
-    <rect x="${left}" y="${top}" width="${barWidth}" height="54" fill="#f7c948"/>
-    <text x="${left + 14}" y="${top + 35}" fill="#071113" font-size="22" font-weight="700">${bad} not developable</text>
-    <text x="${width - left - 14}" y="${top + 35}" fill="#a8dbe5" font-size="18" text-anchor="end">${good} genuine</text>
-    <text class="chart-value" x="${left}" y="${top + 100}" font-size="46">${(review.false_positive_rate * 100).toFixed(0)}%</text>
-    <text class="chart-label" x="${left}" y="${top + 128}">FALSE-POSITIVE RATE OF THE ROAD PROXY'S WORST DISAGREEMENTS</text>
-    <text class="chart-label" x="${left}" y="${top + 172}">COASTAL BARRIER SPIT · LAGOON AND WETLAND MARGIN · BANKS PENINSULA SLOPE</text>
-    <text class="chart-label" x="${left}" y="${top + 196}">NO SLOPE RULE AND NO COASTAL-HAZARD RULE IS IMPLEMENTED IN THE BASELINE</text>
+    <text class="chart-label" x="${left}" y="26">AERIAL REVIEW OF THE ${review.queued} LARGEST DISAGREEMENTS</text>
+    <rect x="${left}" y="${top}" width="${width - left * 2}" height="50" fill="#12343b"/>
+    <rect x="${left}" y="${top}" width="${barWidth}" height="50" fill="#f7c948"/>
+    <text x="${left + 14}" y="${top + 32}" fill="#071113" font-size="21" font-weight="700">${bad} not developable</text>
+    <text x="${width - left - 14}" y="${top + 32}" fill="#a8dbe5" font-size="17" text-anchor="end">${good} genuine</text>
+    <rect x="${left}" y="${top + 62}" width="${width - left * 2}" height="22" fill="#12343b"/>
+    <rect x="${left}" y="${top + 62}" width="${caughtWidth}" height="22" fill="#5bd6b0"/>
+    <text class="chart-label" x="${left}" y="${top + 104}">${check.caught_by_any} OF THOSE ${bad} ARE NOW CAUGHT BY S-08 SLOPE, S-09 WATER OR S-10 COAST</text>
+    <text class="chart-value" x="${left}" y="${top + 162}" font-size="42">${(review.false_positive_rate * 100).toFixed(0)}%</text>
+    <text class="chart-label" x="${left}" y="${top + 188}">OF THE ROAD PROXY'S WORST DISAGREEMENTS — A DISAGREEMENT-SELECTED SAMPLE,</text>
+    <text class="chart-label" x="${left}" y="${top + 208}">NOT THE CANDIDATE POPULATION</text>
+    <text class="chart-label" x="${left}" y="${top + 244}">COASTAL BARRIER SPIT · WETLAND MARGIN · 14–24° PENINSULA SLOPE · ENCLOSED VALLEY</text>
   </svg>`;
 }
 

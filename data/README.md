@@ -12,7 +12,9 @@ Full raw files are intentionally excluded from Git. Record every downloaded file
 | Regional boundary | LINZ Data Service | CC BY 4.0 | Workflow documented; not redistributed |
 | Half-hourly final prices | Electricity Authority Data & Insights | Public CSV | Retrieval script included; demo output identifies status |
 | Half-hourly metered grid export (load) | Electricity Authority Data & Insights | Public CSV | Retrieval script included; filtered ISL0661 series committed |
-| OSM farmland, power lines, road centrelines | OpenStreetMap via Overpass | ODbL 1.0, no account | Canterbury plains extract committed under attribution |
+| OSM farmland, power lines, road centrelines, water and coastline | OpenStreetMap via Overpass | ODbL 1.0, no account | Canterbury plains extract committed under attribution |
+| Copernicus GLO-30 DEM | AWS open-data bucket | Free, no account | Tiles not committed; per-site slope table committed |
+| Aerial imagery | LINZ Basemaps | CC BY 4.0 | Review mosaics committed under `data/aerial/` |
 
 ## Spatial workflow
 
@@ -36,6 +38,14 @@ LINZ Topo50, LCDB and LENZ all need portal accounts, so the grid-distance work r
 **Attribution: (c) OpenStreetMap contributors, data available under the Open Database Licence (ODbL 1.0).** Derived outputs in `outputs/osm/` inherit that licence.
 
 This is a substitute, not the intended source. OSM completeness varies by area and contributor, `power=minor_line` is not the same population as the LINZ powerline layer, and a mapped land-use polygon is a land-use observation rather than a parcel title. `data/aerial_review_log.csv` records the LINZ Basemaps aerial checks done on the largest disagreements, including one polygon that turned out to be a coastal sand spit.
+
+## Terrain
+
+`scripts/compute_site_terrain.py` derives slope for every OSM site that passes the area and width rules, from the Copernicus GLO-30 DEM served as cloud-optimised GeoTIFF from a public bucket. It needs no account. Slope is computed on the 1-arcsecond grid with the degree spacing converted to metres at each tile's latitude, then averaged inside the polygon.
+
+The DEM tiles are about 90 MB for this study area and are **not committed**; they land in `data/raw/copernicus_dem/`, which is gitignored. What is committed is `data/derived/osm/site_terrain.csv` - site id, DEM tile, sample count, mean and 90th-percentile slope - a few tens of kilobytes, and all the screening rule needs. That is why the terrain step is not part of CI while the study that consumes it is.
+
+GLO-30 is a surface model, so shelterbelts and buildings inflate slope locally. S-08 therefore uses the mean over the polygon rather than the maximum, and it is a terrain screen rather than a civil design input.
 
 ## Demo boundary
 
