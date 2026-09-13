@@ -197,9 +197,61 @@ The one site that trips nothing is instructive. It is a flat 312 ha barrier-spit
 
 - **OpenStreetMap is not LINZ.** Completeness varies by area and contributor; 994 mapped ways carry no voltage tag at all and sit in none of the tiers. The absence of a mapped line is not evidence that no line exists.
 - **A land-use polygon is not a parcel.** Eleven of twenty says so. Real screening needs LCDB or cadastral polygons.
-- **Still missing, and still blocked on credentials:** the LINZ Topo50 and LCDB versions of this same run. Nothing here should be quoted as a LINZ result.
+- **Still missing:** the LINZ Topo50 and LCDB versions of this same run. Nothing here should be quoted as a LINZ result. The code to produce it is in place — see [the real-data run](#the-real-data-run) — and what remains is two free portal accounts, which only the account holder can create.
 
 Attribution: © OpenStreetMap contributors, ODbL 1.0. Aerial imagery © LINZ and Environment Canterbury, CC BY 4.0.
+
+## The real-data run
+
+Everything above runs on open data that needs no account. The full screen — LCDB
+land cover, NZLRI LUC class, LENZ solar resource, LINZ powerlines and roads, DOC
+conservation areas — needs two free accounts, and an API key is personal to its
+holder. So the repository ships the path rather than the result:
+
+```bash
+export LRIS_API_KEY=...   # https://lris.scinfo.org.nz
+export LINZ_API_KEY=...   # https://data.linz.govt.nz
+python scripts/build_real_sites.py
+python scripts/compute_site_terrain.py --sites data/derived/real/sites.gpkg --output data/derived/real/site_terrain.csv
+solar-screen --sites data/derived/real/sites.gpkg \
+  --conservation data/derived/real/conservation.gpkg \
+  --powerlines data/derived/real/powerlines.gpkg \
+  --roads data/derived/real/roads.gpkg --output outputs/real
+```
+
+`build_real_sites.py` pulls each layer over WFS, clips it to the study bounding
+box, projects to EPSG:2193, and assembles the four attributes the screen
+requires: LCDB polygons of the configured usable classes become the candidate
+sites, and LUC class and solar resource are attached by a point-in-polygon
+lookup at each polygon's representative point.
+
+Three things about it are worth knowing before the first run:
+
+- **Layer ids live in `config/assumptions.yml`**, because publishers reissue
+  datasets and the ids move. The script prints the title the service returns for
+  each id *before* downloading, so the wrong layer shows up in the first lines of
+  output rather than in the results. Two ids are taken from
+  [rules/SOURCES.md](rules/SOURCES.md) (LCDB v5.0 `104400`, LENZ solar `48095`);
+  the rest are marked `verify` in the config and should be checked against the
+  portal page once.
+- **Site identifiers are derived from the geometry**, not from the order the
+  service happened to page features back, so a re-download does not renumber
+  every site.
+- **A polygon with no LUC or no solar value is reported, not dropped.** Those go
+  to `sites_unattributed.gpkg` with a count on stdout, because a silent drop
+  would hide a failed join.
+
+**This path is tested against fixtures, not against the live services.**
+`tests/test_real_sites.py` exercises the assembly on layers shaped like the real
+ones — publisher column spellings, multipart polygons, sites outside every
+source polygon — but no test has touched LRIS or LINZ. Treat the first live run
+as a verification run: check the printed layer titles, the feature counts and
+the unattributed count before trusting any output.
+
+Once it has run, S-05 finally has real parcels behind it. The NPS-HPL flag is
+the rule that most needs them: it is a **flag** precisely because LUC class
+alone is not the planning test, and that argument is easier to make against
+actual Canterbury land than against twelve rectangles.
 
 ## Scope and decision logic
 
@@ -306,7 +358,7 @@ The market series are different: both the ISL0661 half-hourly final prices and t
 
 ## Validation
 
-Ninety-seven automated tests cover shared configuration and both CLIs, CRS/schema/geometry gates, exclusion and flag rules, both width methods, candidate-only ranking, spatial-indexed nearest distance, configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, strict market-value input validity, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry, seasonal/intraday decomposition, the metered load control, sensitivities, OSM voltage tiers, terrain and water rules, aerial-review evidence and top-to-bottom notebook execution.
+One hundred and seven automated tests cover shared configuration and both CLIs, CRS/schema/geometry gates, exclusion and flag rules, both width methods, candidate-only ranking, spatial-indexed nearest distance, configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, strict market-value input validity, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry, seasonal/intraday decomposition, the metered load control, sensitivities, OSM voltage tiers, terrain and water rules, aerial-review evidence, the real-data assembly path against fixtures — publisher column spellings, multipart splitting, geometry-derived identifiers, the refusal to run without an API key — and top-to-bottom notebook execution.
 
 GitHub Actions installs the committed lock, reruns both complete pipelines and compares the full tracked output-file manifest. It strictly diffs CSV/JSON; because GeoPackage and PNG bytes vary across operating systems, `scripts/verify_reproduced_outputs.py` compares GeoPackages by fields and geometry and applies a bounded pixel-difference check to every generated figure. Binary outputs are therefore covered without requiring byte-identical cross-platform files.
 

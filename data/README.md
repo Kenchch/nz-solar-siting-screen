@@ -18,6 +18,12 @@ Machine-readable source, transform, partial-file status and derived checksums ar
 | Copernicus GLO-30 DEM | AWS open-data bucket | Free, no account | Tiles not committed; per-site slope table committed |
 | Aerial imagery | LINZ Basemaps | CC BY 4.0 | Review mosaics committed under `data/aerial/` |
 
+## Real-data assembly
+
+`scripts/build_real_sites.py` performs the steps below automatically over WFS, given `LRIS_API_KEY` and `LINZ_API_KEY`. It writes `data/derived/real/` with one GeoPackage per layer, named so that `solar-screen --sites` takes them unchanged, plus `sites_unattributed.gpkg` for any polygon the LUC or solar join could not resolve. Layer ids, the study bounding box and the accepted attribute spellings are all in `config/assumptions.yml` under `real_data`.
+
+The manual route below remains valid and is what to fall back on if a portal changes its service.
+
 ## Spatial workflow
 
 1. Export Canterbury-clipped layers as GeoPackage in NZTM2000 / EPSG:2193.

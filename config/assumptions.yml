@@ -77,6 +77,42 @@ osm_study:
       maximum_v: 32999
       review_distance_m: 1000.0
 
+# Real-data assembly. Both portals are Koordinates-based and both need a free
+# account and an API key that only the account holder can create: export them as
+# LRIS_API_KEY and LINZ_API_KEY. Layer ids change when a publisher reissues a
+# dataset, so scripts/build_real_sites.py prints the title the service returns
+# for each id before downloading anything.
+real_data:
+  lris_service: https://lris.scinfo.org.nz/services
+  linz_service: https://data.linz.govt.nz/services
+  # Same Canterbury study area as the OpenStreetMap run, in EPSG:2193, so the
+  # two are comparable: minx, miny, maxx, maxy.
+  bbox_nztm: [1450000.0, 5080000.0, 1620000.0, 5230000.0]
+  layers:
+    landcover:
+      portal: lris
+      layer_id: 104400   # LCDB v5.0, mainland New Zealand
+    luc:
+      portal: lris
+      layer_id: 48079    # NZLRI Land Use Capability - verify on the portal page
+    solar:
+      portal: lris
+      layer_id: 48095    # LENZ mean annual solar radiation
+    powerlines:
+      portal: linz
+      layer_id: 50311    # NZ Powerline Centrelines (Topo 1:50k) - verify
+    roads:
+      portal: linz
+      layer_id: 50329    # NZ Road Centrelines (Topo 1:50k) - verify
+    conservation:
+      portal: linz
+      layer_id: 754      # DOC Public Conservation Areas - verify
+  # Publishers spell these differently between releases; the first match wins and
+  # a miss reports the columns that were actually present.
+  landcover_class_fields: [Name_2018, Name_2012, Class_2018, lcdb_class, Name]
+  luc_class_fields: [lucl, LUC, luc_class, lcorr, Class]
+  solar_value_fields: [solrad, Solar_Radiation, mean_annual_solar_radiation, solar_kwh_m2, Value]
+
 market:
   node: ISL0661
   timezone: Pacific/Auckland
