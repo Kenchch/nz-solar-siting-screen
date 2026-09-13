@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import shutil
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,13 +16,12 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
-import yaml
 
 from nz_solar_siting.capture import yearly_capture_rates
+from nz_solar_siting.config import load_project_config, verify_data_checksums
 from nz_solar_siting.demo_data import build_demo_layers
 from nz_solar_siting.screen import run_screening
 from nz_solar_siting.site_cards import write_site_cards
-from nz_solar_siting.siting import SitingConfig
 from nz_solar_siting.solar_shape import half_hour_shape
 
 
@@ -42,6 +42,9 @@ def plot_grid_comparison(candidates: gpd.GeoDataFrame, path: Path) -> None:
 def plot_capture(rates: pd.DataFrame, path: Path) -> None:
     fig, ax = plt.subplots(figsize=(8.5, 4.8))
     ax.plot(rates["year"], rates["solar_capture_rate"] * 100, marker="o", color="#e5a300", linewidth=2.5, label="Modelled solar shape")
+    partial = rates.loc[~rates["complete_year"]]
+    if not partial.empty:
+        ax.scatter(partial["year"], partial["solar_capture_rate"] * 100, marker="x", s=90, color="#b33a3a", linewidth=2.5, label="Partial year")
     ax.plot(rates["year"], rates["load_capture_rate"] * 100, marker="s", color="#b5179e", linewidth=2, label="ISL0661 metered load control")
     ax.plot(rates["year"], rates["flat_capture_rate"] * 100, linestyle="--", color="#24545d", label="Flat output invariant")
     ax.axhline(100, color="#89969c", linewidth=1)
@@ -98,25 +101,20 @@ def main() -> None:
     parser.add_argument("--demo", action="store_true", help="Use committed deterministic demo inputs")
     parser.add_argument("--output", default="outputs/demo")
     parser.add_argument("--prices", help="Override the committed UTC price input")
+    parser.add_argument("--config", default="config/assumptions.yml")
     args = parser.parse_args()
     if not args.demo:
         parser.error("pass --demo for the reproducible committed workflow")
 
-    assumptions = yaml.safe_load((ROOT / "config" / "assumptions.yml").read_text(encoding="utf-8"))
-    siting = assumptions["siting"]
+    project_config = load_project_config(ROOT / args.config)
+    assumptions = project_config.assumptions
     solar = assumptions["solar"]
     market = assumptions["market"]
-    score_weights = siting["screen_score_weights"]
-    siting_config = SitingConfig(
-        minimum_area_ha=float(siting["minimum_area_ha"]),
-        minimum_average_width_m=float(siting["minimum_average_width_m"]),
-        usable_lcdb_classes=tuple(siting["usable_lcdb_classes"]),
-        grid_distance_review_m=float(siting["grid_distance_review_m"]),
-        rank_shift_review=int(siting["rank_shift_review"]),
-        solar_score_weight=float(score_weights["solar_resource"]),
-        area_score_weight=float(score_weights["area"]),
-    )
-    output = ROOT / args.output
+    output = (ROOT / args.output).resolve()
+    if output == ROOT or not output.is_relative_to(ROOT):
+        raise ValueError("--output must be a directory inside the repository")
+    if output.exists():
+        shutil.rmtree(output)
     figures = output / "figures"
     cards = output / "site_cards"
     figures.mkdir(parents=True, exist_ok=True)
@@ -124,9 +122,9 @@ def main() -> None:
     sites, conservation, powerlines, roads = build_demo_layers()
     manifest = run_screening(
         sites, conservation, powerlines, roads, output,
-        reject_rate_threshold=float(siting["maximum_reject_rate"]),
-        config=siting_config,
-        top_n_comparison=int(siting["top_n_comparison"]),
+        config=project_config.siting,
+        top_n_comparison=project_config.demo_top_n_comparison,
+        scope="screening only; demo geometries are not real parcels",
     )
     candidates = gpd.read_file(output / "candidates.gpkg")
     plot_grid_comparison(candidates, figures / "grid_distance_comparison.png")
@@ -135,10 +133,13 @@ def main() -> None:
     price_path = ROOT / (args.prices or "data/derived/ISL0661_2019_2025.csv.gz")
     if not price_path.exists():
         raise FileNotFoundError(f"reproducible price input not found: {price_path}")
+    if not args.prices:
+        verify_data_checksums(ROOT / "data", ("derived/ISL0661_2019_2025.csv.gz",))
     prices = pd.read_csv(price_path)
     load_path = ROOT / str(market["load_control_path"])
     if not load_path.exists():
         raise FileNotFoundError(f"load control input not found: {load_path}")
+    verify_data_checksums(ROOT / "data", ("derived/ISL0661_load_2019_2025.csv.gz",))
     load_shape = pd.read_csv(load_path)
     rate_options = {
         "latitude_deg": float(solar["latitude_deg"]),
@@ -216,6 +217,21 @@ def main() -> None:
     if int(accounting["nz_market_year_rows"].sum()) != len(prices):
         raise RuntimeError("NZ market-year accounting does not reconcile to price input")
     accounting.to_csv(output / "market_year_accounting.csv", index=False)
+    quality = pd.DataFrame([{
+        "input_rows": len(prices),
+        "aligned_rows": int(rates["observations"].sum()),
+        "valid_price_rows": int(rates["observations"].sum()),
+        "duplicate_utc_rows": int(prices["timestamp_utc"].duplicated().sum()),
+        "complete_market_years": int(rates["complete_year"].sum()),
+        "partial_market_years": int((~rates["complete_year"]).sum()),
+    }])
+    if not (
+        quality.loc[0, "input_rows"]
+        == quality.loc[0, "aligned_rows"]
+        == quality.loc[0, "valid_price_rows"]
+    ):
+        raise RuntimeError("price quality counts do not reconcile")
+    quality.to_csv(output / "price_quality.csv", index=False)
 
     def summarise(result: pd.DataFrame) -> dict[str, float]:
         return {
@@ -277,7 +293,7 @@ def main() -> None:
     payload = {
         **manifest,
         "osm_grid_study": osm_study,
-        "price_status": "official Electricity Authority final prices, ISL0661; unique UTC trading-period keys",
+        "price_status": "official EA final prices, ISL0661; 2025 is partial (17,472 / 17,520 periods)",
         "capture_rates": rates.round(4).to_dict(orient="records"),
         "shape_exponent_sensitivity": sensitivity_rows,
         "tilt_sensitivity": tilt_rows,
@@ -285,12 +301,17 @@ def main() -> None:
         "seasonal_mismatch": monthly.round(4).to_dict(orient="records"),
         "solar_time_basis_comparison": time_basis_comparison.to_dict(orient="records"),
         "market_year_accounting": accounting.to_dict(orient="records"),
+        "price_quality": quality.to_dict(orient="records")[0],
         "top_sites": candidates.nlargest(6, "screen_score")[[
             "site_id", "area_ha", "width_core_pass", "width_2ap_m",
             "width_methods_disagree", "S05_hpl_flag", "grid_line_m",
             "road_proxy_m", "rank_shift", "solar_kwh_m2", "screen_score",
         ]].to_dict(orient="records"),
     }
+    centroids = candidates.geometry.centroid
+    centroid_lookup = dict(zip(candidates["site_id"], zip(centroids.x, centroids.y)))
+    for site in payload["top_sites"]:
+        site["centroid_easting"], site["centroid_northing"] = centroid_lookup[site["site_id"]]
     (output / "findings.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
     (ROOT / "docs" / "data.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
     print(json.dumps(payload, indent=2))

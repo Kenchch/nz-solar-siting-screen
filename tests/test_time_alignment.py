@@ -69,6 +69,17 @@ def test_yearly_merge_preserves_every_input_row():
     })
     result = yearly_capture_rates(prices)
     assert result.loc[0, "observations"] == len(prices)
+    assert not bool(result.loc[0, "complete_year"])
+
+
+def test_yearly_capture_rejects_nonfinite_prices():
+    shape = half_hour_shape(2023).iloc[:2]
+    prices = pd.DataFrame({
+        "timestamp_utc": shape.timestamp_utc,
+        "price_nzd_mwh": [50.0, float("nan")],
+    })
+    with pytest.raises(ValueError, match="non-finite"):
+        yearly_capture_rates(prices)
 
 
 def test_market_year_observation_totals_reconcile_to_all_input_rows():

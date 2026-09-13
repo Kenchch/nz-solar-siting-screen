@@ -12,6 +12,10 @@ class CaptureAlignmentError(ValueError):
     """Raised when prices and the production shape cannot align one-to-one."""
 
 
+class PriceDataQualityError(ValueError):
+    """Raised when market rows would otherwise be silently excluded."""
+
+
 def trading_period_timestamps(
     trading_dates: pd.Series,
     trading_periods: pd.Series,
@@ -49,8 +53,11 @@ def _as_utc(values: pd.Series) -> pd.Series:
 def capture_rate(prices: pd.Series, output: pd.Series) -> float:
     price = pd.to_numeric(prices, errors="coerce").to_numpy(dtype=float)
     generation = pd.to_numeric(output, errors="coerce").to_numpy(dtype=float)
-    valid = np.isfinite(price) & np.isfinite(generation)
-    price, generation = price[valid], generation[valid]
+    if len(price) != len(generation):
+        raise PriceDataQualityError("price and output lengths differ")
+    invalid = ~(np.isfinite(price) & np.isfinite(generation))
+    if invalid.any():
+        raise PriceDataQualityError(f"capture rate contains {int(invalid.sum())} non-finite rows")
     if len(price) == 0 or generation.sum() <= 0 or abs(price.mean()) < 1e-12:
         raise ValueError("capture rate requires finite prices, positive output and non-zero mean price")
     return float(np.sum(price * generation) / (np.sum(generation) * np.mean(price)))
@@ -82,7 +89,9 @@ def decompose_capture_rate(
             "day": np.asarray(day),
         }
     )
-    frame = frame[np.isfinite(frame["price"]) & np.isfinite(frame["output"])]
+    invalid = ~(np.isfinite(frame["price"]) & np.isfinite(frame["output"]))
+    if invalid.any():
+        raise PriceDataQualityError(f"decomposition contains {int(invalid.sum())} non-finite rows")
     if frame.empty or frame["output"].sum() <= 0 or abs(frame["price"].mean()) < 1e-12:
         raise ValueError("decomposition requires finite prices, positive output and non-zero mean price")
     daily = frame.groupby("day", sort=False).agg(
@@ -116,6 +125,11 @@ def yearly_capture_rates(
         duplicate = data.loc[data[timestamp_col].duplicated(False), timestamp_col].iloc[0]
         raise CaptureAlignmentError(f"duplicate price timestamp: {duplicate}")
     data[price_col] = pd.to_numeric(data[price_col], errors="coerce")
+    invalid_price = ~np.isfinite(data[price_col].to_numpy(dtype=float))
+    if invalid_price.any():
+        raise PriceDataQualityError(
+            f"price input contains {int(invalid_price.sum())} missing or non-finite values"
+        )
     local = data[timestamp_col].dt.tz_convert(timezone)
     local_year = local.dt.year
     data["_local_date"] = local.dt.date
@@ -124,6 +138,11 @@ def yearly_capture_rates(
         load = load_shape[[load_timestamp_col, load_col]].copy()
         load[load_timestamp_col] = _as_utc(load[load_timestamp_col])
         load[load_col] = pd.to_numeric(load[load_col], errors="coerce")
+        invalid_load = ~np.isfinite(load[load_col].to_numpy(dtype=float))
+        if invalid_load.any():
+            raise PriceDataQualityError(
+                f"load control contains {int(invalid_load.sum())} missing or non-finite values"
+            )
         if load[load_timestamp_col].duplicated().any():
             raise CaptureAlignmentError("duplicate load timestamp in the control shape")
         load = load.rename(columns={load_timestamp_col: "timestamp_utc", load_col: "load_control"})
@@ -155,6 +174,8 @@ def yearly_capture_rates(
         )
         record: dict[str, float | int] = {
             "year": int(year), "observations": int(len(merged)),
+            "expected_observations": int(len(shape)),
+            "complete_year": bool(len(merged) == len(shape)),
             "mean_price_nzd_mwh": float(merged[price_col].mean()),
             "solar_capture_rate": capture_rate(merged[price_col], merged["output_pu"]),
             "seasonal_capture_rate": seasonal,
@@ -196,6 +217,13 @@ def read_ea_price_csv(path: str, node: str, timezone: str = "Pacific/Auckland") 
     if not all((node_col, price_col, date_col, period_col)):
         raise ValueError(f"unrecognised EA schema: {list(raw.columns)}")
     out = raw.loc[raw[node_col].astype(str).str.upper() == node.upper()].copy()
+    if out.empty:
+        raise PriceDataQualityError(f"no price rows found for node {node}")
     out["timestamp_utc"] = trading_period_timestamps(out[date_col], out[period_col], timezone)
     out["price_nzd_mwh"] = pd.to_numeric(out[price_col], errors="coerce")
-    return out[["timestamp_utc", "price_nzd_mwh"]].dropna()
+    invalid = ~np.isfinite(out["price_nzd_mwh"].to_numpy(dtype=float))
+    if invalid.any():
+        raise PriceDataQualityError(
+            f"{node}: {int(invalid.sum())} price rows are missing or non-numeric"
+        )
+    return out[["timestamp_utc", "price_nzd_mwh"]]

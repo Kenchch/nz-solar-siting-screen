@@ -3,6 +3,10 @@ let dataset;
 
 function renderCandidates(sortKey = "screen_score") {
   const rows = [...dataset.top_sites].sort((a, b) => b[sortKey] - a[sortKey]);
+  const eastings = rows.map(site => site.centroid_easting);
+  const northings = rows.map(site => site.centroid_northing);
+  const minE = Math.min(...eastings), maxE = Math.max(...eastings);
+  const minN = Math.min(...northings), maxN = Math.max(...northings);
   document.querySelector("#candidate-rows").innerHTML = rows.map(site => `
     <tr>
       <td><strong>${site.site_id}</strong><br><small>${fmt.format(site.area_ha)} ha</small></td>
@@ -10,9 +14,9 @@ function renderCandidates(sortKey = "screen_score") {
       <td>${fmt.format(site.grid_line_m)} / ${fmt.format(site.road_proxy_m)} m<br><small>shift ${site.rank_shift}</small></td>
       <td class="${site.S05_hpl_flag ? "flag" : "clear"}">${site.S05_hpl_flag ? "LUC review" : "clear flag"}</td>
     </tr>`).join("");
-  document.querySelector("#map-points").innerHTML = rows.map((site, index) => {
-    const x = 17 + ((site.road_proxy_m / 2600 + index * 13) % 68);
-    const y = 22 + ((site.grid_line_m / 1900 + index * 17) % 60);
+  document.querySelector("#map-points").innerHTML = rows.map(site => {
+    const x = 14 + 72 * (site.centroid_easting - minE) / Math.max(1, maxE - minE);
+    const y = 14 + 72 * (maxN - site.centroid_northing) / Math.max(1, maxN - minN);
     return `<span class="map-point" style="left:${x}%;top:${y}%" data-label="${site.site_id}"></span>`;
   }).join("");
 }
@@ -172,8 +176,9 @@ fetch("data.json")
     document.querySelector("#candidate-count").textContent = data.candidates;
     document.querySelector("#total-count").textContent = data.total;
     document.querySelector("#grid-overlap").textContent = Number(data.grid_comparison.jaccard).toFixed(2);
-    const latest = data.capture_rates[data.capture_rates.length - 1];
+    const latest = [...data.capture_rates].reverse().find(row => row.complete_year);
     document.querySelector("#latest-capture").textContent = `${(latest.solar_capture_rate * 100).toFixed(0)}%`;
+    document.querySelector("#latest-year").textContent = latest.year;
     document.querySelector("#price-status").textContent = data.price_status;
     const worst = data.capture_rates.reduce((a, b) => (a.solar_capture_rate <= b.solar_capture_rate ? a : b));
     const intradayHost = document.querySelector("#intraday-term");

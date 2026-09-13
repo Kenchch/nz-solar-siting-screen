@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import shutil
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,12 +39,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import yaml
 
+from nz_solar_siting.config import load_project_config, verify_data_checksums
 from nz_solar_siting.geometry import area_hectares, has_width_core
 from nz_solar_siting.grid_distance import compare_top_n, nearest_distance_m
 from nz_solar_siting.osm_layers import read_osm_layer, read_osm_layers, split_by_voltage
-from nz_solar_siting.siting import SitingConfig
 
 SHORTLIST_SIZES = (10, 25, 50, 100, 250, 500)
 TIER_COLOURS = {
@@ -112,21 +112,26 @@ def main() -> None:
     parser.add_argument("--aerial-sample", type=int, default=20)
     arguments = parser.parse_args()
 
-    assumptions = yaml.safe_load((ROOT / "config" / "assumptions.yml").read_text(encoding="utf-8"))
-    siting = assumptions["siting"]
+    project_config = load_project_config(ROOT / "config" / "assumptions.yml")
+    assumptions = project_config.assumptions
     study_config = assumptions["osm_study"]
     tiers = study_config["voltage_tiers"]
     connection_tier = str(study_config["connection_tier"])
-    config = SitingConfig(
-        minimum_area_ha=float(siting["minimum_area_ha"]),
-        minimum_average_width_m=float(siting["minimum_average_width_m"]),
-        rank_shift_review=int(siting["rank_shift_review"]),
-        grid_distance_review_m=float(siting["grid_distance_review_m"]),
-    )
-    output = ROOT / arguments.output
+    config = project_config.siting
+    output = (ROOT / arguments.output).resolve()
+    if output == ROOT or not output.is_relative_to(ROOT):
+        raise ValueError("--output must be a directory inside the repository")
+    if output.exists():
+        shutil.rmtree(output)
     output.mkdir(parents=True, exist_ok=True)
 
     osm_dir = ROOT / "data" / "derived" / "osm"
+    verify_data_checksums(ROOT / "data", (
+        "derived/osm/coastline.geojson.gz", "derived/osm/farmland.geojson.gz",
+        "derived/osm/powerlines.geojson.gz", "derived/osm/roads.geojson.gz",
+        "derived/osm/wetland.geojson.gz", "derived/osm/site_terrain.csv",
+        "aerial_review_log.csv",
+    ))
     farmland, powerlines, roads, wetland, coastline = read_osm_layers(osm_dir)
     networks, tier_counts = split_by_voltage(
         powerlines, tiers, float(study_config["excluded_voltage_v"])

@@ -23,6 +23,8 @@ def assert_nztm(frame: gpd.GeoDataFrame, name: str = "layer") -> None:
         )
     if frame.geometry.isna().any() or frame.geometry.is_empty.any():
         raise InputValidationError(f"{name}: contains missing or empty geometry")
+    if (~frame.geometry.is_valid).any():
+        raise InputValidationError(f"{name}: contains invalid geometry")
 
 
 def read_layer(

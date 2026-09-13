@@ -6,9 +6,7 @@ project:
 siting:
   minimum_area_ha: 20.0
   minimum_average_width_m: 180.0
-  maximum_reject_rate: 0.55
-  # Demo-only top half of eight surviving fixtures; never an empirical estimate.
-  top_n_comparison: 4
+  top_n_comparison: 10
   usable_lcdb_classes:
     - High Producing Exotic Grassland
     - Low Producing Grassland
@@ -85,3 +83,7 @@ market:
   # Real metered grid-exit demand at the same node, used as the M3 control
   # shape so the capture rate is compared with something other than a flat line.
   load_control_path: data/derived/ISL0661_load_2019_2025.csv.gz
+
+demo:
+  # Top half of eight surviving fixtures; never an empirical estimate.
+  top_n_comparison: 4

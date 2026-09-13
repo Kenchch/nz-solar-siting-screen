@@ -1,0 +1,44 @@
+{
+  "recorded_date": "2026-09-13",
+  "datasets": [
+    {
+      "name": "Electricity Authority final prices, ISL0661",
+      "source": "EA Data & Insights monthly FinalEnergyPrices CSVs",
+      "transform": "filter node; preserve trading date/period; derive unique Pacific/Auckland-to-UTC keys",
+      "file": "derived/ISL0661_2019_2025.csv.gz",
+      "sha256": "ba29ba1c760cb5cfff8aa89ab753f808bb3bf3f0152d9390f1082e7f6b6294d2",
+      "partial_source": "202512_FinalEnergyPrices_incomplete.csv"
+    },
+    {
+      "name": "Electricity Authority metered grid export, ISL0661",
+      "source": "EA Data & Insights monthly Grid export files",
+      "transform": "filter node; sum traders; unpivot TP1-TP50 to the same UTC keys",
+      "file": "derived/ISL0661_load_2019_2025.csv.gz",
+      "sha256": "3e1c6b700252ebb30e0044d699a917ec7cadf1a0c3887e0c32c76b7cf5fde215"
+    },
+    {
+      "name": "Canterbury OSM network and land-use extract",
+      "source": "OpenStreetMap contributors via Overpass; ODbL 1.0",
+      "transform": "clip study bbox; project EPSG:2193; round coordinates; sort features; gzip deterministically",
+      "files_and_sha256": {
+        "derived/osm/coastline.geojson.gz": "2d1c002197cbbaac1ac2485c679cd0f7410f7fd0fc41bb25ea97b017c20816a7",
+        "derived/osm/farmland.geojson.gz": "2ec49ffcc4fcf2128a24866ac2b18a4f22224aa8fd7063dd7e37cfa1a6eccca0",
+        "derived/osm/powerlines.geojson.gz": "849979cdbaaec17d2e90eea1baf512e39acdc5d32acf523b808ab5b20529cc0a",
+        "derived/osm/roads.geojson.gz": "ffacff8321580e0476b30e50a96598a70fefaf899f11d68c12201f4c470b42b7",
+        "derived/osm/wetland.geojson.gz": "d1e59efd524bf810f9dc9e1673dc7f83e3edee83ab8fb691dd4dd6fc85db9af5"
+      }
+    },
+    {
+      "name": "Per-site terrain statistics",
+      "source": "Copernicus GLO-30 DEM",
+      "file": "derived/osm/site_terrain.csv",
+      "sha256": "86006ab88f928b62811ba43a9a89045d2584825067beb7e58c6af1e301a8e796"
+    },
+    {
+      "name": "Aerial review log",
+      "source": "LINZ Basemaps imagery; CC BY 4.0",
+      "file": "aerial_review_log.csv",
+      "sha256": "f6ab9e864ae15ae57ce84b2773bdc61ac0303f47070dad446a0724f2d9987136"
+    }
+  ]
+}

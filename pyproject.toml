@@ -32,5 +32,5 @@ solar-screen = "nz_solar_siting.screen:main"
 where = ["src"]
 
 [tool.pytest.ini_options]
-addopts = "-q --basetemp=.pytest_tmp"
+addopts = "-q -p no:cacheprovider"
 testpaths = ["tests"]

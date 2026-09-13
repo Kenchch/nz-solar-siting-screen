@@ -216,7 +216,7 @@ Attribution: © OpenStreetMap contributors, ODbL 1.0. Aerial imagery © LINZ and
 | S-09 mapped water | Exclude | any intersection with mapped standing water or wetland |
 | S-10 coastal proximity | **Flag** | within 1,000 m of the open coast → hazard review |
 
-Excluded records are written to `quarantine.gpkg` with the rule IDs that removed them. A configurable reject-rate gate aborts output when a batch looks more like a wrong input or CRS than a plausible screen.
+Excluded records are written to `quarantine.gpkg` with the rule IDs that removed them. Selection rate is reported as an outcome, not treated as evidence of corruption. Publication instead fails on wrong CRS, empty or invalid geometry, duplicate site IDs, missing required fields, non-finite solar values, duplicate or unmatched market periods, non-finite prices and failed row reconciliation.
 
 Not covered: connection-point hosting capacity, voltage, connection cost, land ownership, parcel negotiation, geotechnical conditions, flood and wildfire risk, glare, ecology beyond the public-conservation overlay, archaeology, landscape/visual effects, mana whenua values, local plan rules, network losses, curtailment or construction access.
 
@@ -258,17 +258,16 @@ This is a **market-value signal, not a revenue forecast**. It uses nodal spot pr
 
 ## Reproduce
 
-Python 3.11+ is required.
+Python 3.11+ and `uv` are required. `uv.lock` fixes the complete tested dependency graph.
 
 ```bash
-python -m venv .venv
-.venv/bin/pip install -e ".[dev]"
-.venv/bin/python scripts/reproduce.py --demo
-.venv/bin/python scripts/osm_grid_study.py
-.venv/bin/python -m pytest
+uv sync --locked --all-extras
+uv run --locked python scripts/osm_grid_study.py
+uv run --locked python scripts/reproduce.py --demo
+uv run --locked pytest
 ```
 
-On Windows use `.venv/Scripts/` in place of `.venv/bin/`. Both runs read only committed inputs, so neither needs network access. To refresh those inputs, run `scripts/download_ea_prices.py`, `scripts/download_ea_load.py`, `scripts/download_osm_networks.py` and `scripts/compute_site_terrain.py`; the last of these downloads about 90 MB of Copernicus DEM tiles, which is why its output is committed as a small per-site table and it is not part of CI. LRIS and LINZ exports require the accounts/API keys described in [data/README.md](data/README.md).
+To screen user-prepared real layers, run `uv run --locked solar-screen --sites sites.gpkg --conservation conservation.gpkg --powerlines powerlines.gpkg --roads roads.gpkg --output outputs/real`. The site layer must already contain `site_id`, `lcdb_class`, `luc_class` and `solar_kwh_m2`; raw portal export assembly and raster zonal statistics remain outside this command. Both committed runs read only committed inputs, so neither needs network access. To refresh those inputs, run `scripts/download_ea_prices.py`, `scripts/download_ea_load.py`, `scripts/download_osm_networks.py` and `scripts/compute_site_terrain.py`; the last downloads about 90 MB of Copernicus DEM tiles. LRIS and LINZ exports require the accounts/API keys described in [data/README.md](data/README.md).
 
 ## Notebooks
 
@@ -289,6 +288,7 @@ Both are executed top to bottom by `tests/test_notebooks.py`, so they cannot qui
 - `outputs/demo/shape_exponent_sensitivity.csv` — timing-shape sensitivity at exponents 1.0, 1.15 and 1.3
 - `outputs/demo/solar_time_basis_comparison.csv` — old civil-clock versus corrected solar-time results
 - `outputs/demo/market_year_accounting.csv` — UTC-year and NZ-market-year row reconciliation
+- `outputs/demo/price_quality.csv` — input, aligned and valid price-row counts plus completeness
 - `outputs/demo/run_manifest.json` and `findings.json` — machine-readable provenance and dashboard payload
 - `outputs/osm/osm_grid_distance.csv` and `osm_grid_study.json` — the real-geometry grid-proxy comparison over 2,356 OSM farmland polygons
 - `outputs/osm/aerial_review_queue.csv` — the twenty largest disagreements with coordinates, a LINZ Basemaps link, the terrain and water columns, and the completed aerial verdicts
@@ -298,7 +298,7 @@ Both are executed top to bottom by `tests/test_notebooks.py`, so they cannot qui
 
 ## Demo versus real data
 
-The committed spatial outputs under `outputs/demo/` are deliberately marked `DEMO`: deterministic NZTM geometries exercise every code path without redistributing portal-controlled datasets or making parcel claims. They are not Canterbury candidate parcels. Replace them with the documented LRIS/LINZ/DOC layers to make a full real-data run.
+The committed spatial outputs under `outputs/demo/` are deliberately marked `DEMO`: deterministic NZTM geometries exercise every code path without redistributing portal-controlled datasets or making parcel claims. They are not Canterbury candidate parcels. The real-layer CLI screens prepared inputs, but raw LCDB/LUC/raster assembly remains a documented boundary rather than an implied feature.
 
 `outputs/osm/` is different: it runs the geometric rules and the grid-distance comparison on real OpenStreetMap geometry, and its numbers are measurements rather than illustrations — subject to the OSM caveats set out above. See [the OSM study](#measuring-the-grid-proxy-disagreement-on-real-geometry).
 
@@ -306,9 +306,9 @@ The market series are different: both the ISL0661 half-hourly final prices and t
 
 ## Validation
 
-Eighty-six automated tests cover the CRS gate, exclusion and flag rules, both width methods, spatial-indexed nearest distance, the reject-rate gate, the configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry against the horizontal-plane limit, the seasonal/intraday identity and its two synthetic edge cases, the metered load control, output-shape sensitivity, zero-output rejection, the flat-output invariant, agreement between `config/assumptions.yml` and the code defaults, the CRS gate on the committed OSM layers, voltage parsing of shared-circuit tags, that the voltage tiers partition every mapped line exactly once, that a 66 kV way is tiered by voltage rather than by its OSM tag, the published rank-correlation ordering across tiers, that the verify flag discriminates instead of firing on everything, the aerial review's completeness and provenance fields, that every logged verdict cites an image that exists on disk, that the DEM join puts the plains under 2° and the peninsula above 15°, the terrain and water exclusion shares, the in-sample rule check against the labelled twenty, that exclusion and flagging are reported separately and account for every labelled failure, that the published scope field lists the rules actually applied, that the second pass is recorded, and top-to-bottom execution of both notebooks.
+Ninety-seven automated tests cover shared configuration and both CLIs, CRS/schema/geometry gates, exclusion and flag rules, both width methods, candidate-only ranking, spatial-indexed nearest distance, configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, strict market-value input validity, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry, seasonal/intraday decomposition, the metered load control, sensitivities, OSM voltage tiers, terrain and water rules, aerial-review evidence and top-to-bottom notebook execution.
 
-GitHub Actions runs the complete demo pipeline. It strictly diffs CSV/JSON; because GeoPackage and PNG bytes vary across operating systems, `scripts/verify_reproduced_outputs.py` compares GeoPackages by fields and geometry and applies a bounded pixel-difference check to figures. That script compares against `origin/main` for any output the branch has not changed, so a branch cannot grade its own artifacts; where an output was intentionally changed it says so and falls back to a determinism-only comparison against `HEAD`.
+GitHub Actions installs the committed lock, reruns both complete pipelines and compares the full tracked output-file manifest. It strictly diffs CSV/JSON; because GeoPackage and PNG bytes vary across operating systems, `scripts/verify_reproduced_outputs.py` compares GeoPackages by fields and geometry and applies a bounded pixel-difference check to every generated figure. Binary outputs are therefore covered without requiring byte-identical cross-platform files.
 
 ## Licence and attribution
 

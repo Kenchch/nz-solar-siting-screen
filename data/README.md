@@ -2,6 +2,8 @@
 
 Full raw files are intentionally excluded from Git. Record every downloaded file in `checksums.sha256` and transform all spatial inputs to EPSG:2193 before screening. The filtered, gzip-compressed ISL0661 price and load series in `data/derived/` are the committed deterministic market inputs used by CI.
 
+Machine-readable source, transform, partial-file status and derived checksums are recorded in [`provenance.json`](provenance.json). Reproduction verifies the committed market-input checksums before analysis.
+
 | Input | Publisher / entry point | Access and licence | Retrieved for this repository |
 |---|---|---|---|
 | LCDB v5.0 | Manaaki Whenua LRIS, layer 104400 | LRIS account; CC BY 4.0 | Workflow documented; not redistributed |
@@ -21,7 +23,7 @@ Full raw files are intentionally excluded from Git. Record every downloaded file
 1. Export Canterbury-clipped layers as GeoPackage in NZTM2000 / EPSG:2193.
 2. Name layers `landcover`, `luc`, `solar`, `powerlines`, `roads`, `conservation`, and `boundary`.
 3. Keep the source metadata/README beside each raw file and add a SHA-256 line.
-4. Run `solar-screen` or `scripts/reproduce.py`. The loader refuses missing or non-2193 CRS values.
+4. Run `solar-screen --sites sites.gpkg --conservation conservation.gpkg --powerlines powerlines.gpkg --roads roads.gpkg --output outputs/real`. The site layer must already contain `site_id`, `lcdb_class`, `luc_class` and `solar_kwh_m2`; the loader refuses missing fields, invalid geometry and missing or non-2193 CRS values.
 
 ## Electricity prices
 

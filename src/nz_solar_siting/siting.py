@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 from shapely.ops import unary_union
 
@@ -57,6 +58,18 @@ def evaluate_sites(
     missing = required - set(sites.columns)
     if missing:
         raise ValueError(f"sites missing columns: {', '.join(sorted(missing))}")
+    if sites["site_id"].isna().any() or sites["site_id"].astype(str).str.strip().eq("").any():
+        raise ValueError("sites.site_id contains missing or blank values")
+    if sites["site_id"].astype(str).duplicated().any():
+        raise ValueError("sites.site_id must be unique")
+    if not sites.geom_type.isin(["Polygon", "MultiPolygon"]).all():
+        raise ValueError("sites geometry must contain only Polygon or MultiPolygon features")
+    solar = pd.to_numeric(sites["solar_kwh_m2"], errors="coerce")
+    luc = pd.to_numeric(sites["luc_class"], errors="coerce")
+    if not np.isfinite(solar).all():
+        raise ValueError("sites.solar_kwh_m2 must contain only finite numbers")
+    if luc.isna().any():
+        raise ValueError("sites.luc_class must contain only numeric values")
 
     out = sites.copy()
     out["area_ha"] = out.geometry.map(area_hectares).round(2)
@@ -74,12 +87,10 @@ def evaluate_sites(
     out["S04_pass"] = ~out.geometry.map(
         lambda geom: bool(protected is not None and geom.intersects(protected))
     )
+    out["solar_kwh_m2"] = solar
+    out["luc_class"] = luc
     out["S05_hpl_flag"] = out["luc_class"].isin([1, 2, 3])
     out = add_grid_proxies(out, powerlines, roads)
-    out["S06_verify_grid"] = (
-        out[["grid_line_m", "road_proxy_m"]].max(axis=1) > cfg.grid_distance_review_m
-    ) | (out["rank_shift"] >= cfg.rank_shift_review)
-    out["solar_rank"] = out["solar_kwh_m2"].rank(ascending=False, method="min").astype(int)
 
     exclude_columns = ["S01_pass", "S02_pass", "S03_pass", "S04_pass"]
     rule_ids = ["S-01", "S-02", "S-03", "S-04"]
@@ -90,16 +101,28 @@ def evaluate_sites(
     out["status"] = out["failed_rule_ids"].map(
         lambda rules: "candidate_review" if not rules else "quarantine"
     )
+    candidate = out["status"].eq("candidate_review")
+    for column in ("grid_rank", "road_rank", "solar_rank"):
+        out[column] = pd.Series(pd.NA, index=out.index, dtype="Int64")
+    out.loc[candidate, "grid_rank"] = out.loc[candidate, "grid_line_m"].rank(method="min").astype("Int64")
+    out.loc[candidate, "road_rank"] = out.loc[candidate, "road_proxy_m"].rank(method="min").astype("Int64")
+    out.loc[candidate, "solar_rank"] = out.loc[candidate, "solar_kwh_m2"].rank(
+        ascending=False, method="min"
+    ).astype("Int64")
+    out["rank_shift"] = (out["grid_rank"] - out["road_rank"]).abs().astype("Int64")
+    out["S06_verify_grid"] = candidate & (
+        (out[["grid_line_m", "road_proxy_m"]].max(axis=1) > cfg.grid_distance_review_m)
+        | (out["rank_shift"].fillna(0) >= cfg.rank_shift_review)
+    )
     weight_total = cfg.solar_score_weight + cfg.area_score_weight
     if weight_total <= 0:
         raise ValueError("screen-score weights must sum to a positive number")
-    out["screen_score"] = (
-        (
-            cfg.solar_score_weight * out["solar_kwh_m2"].rank(pct=True)
-            + cfg.area_score_weight * out["area_ha"].rank(pct=True)
-        )
-        / weight_total
-    ).round(4)
+    out["screen_score"] = np.nan
+    out.loc[candidate, "screen_score"] = (
+        cfg.solar_score_weight * out.loc[candidate, "solar_kwh_m2"].rank(pct=True)
+        + cfg.area_score_weight * out.loc[candidate, "area_ha"].rank(pct=True)
+    ) / weight_total
+    out["screen_score"] = out["screen_score"].round(4)
 
     audit = out[[
         "site_id", "status", "failed_rule_ids", "width_2ap_m", "width_core_pass",

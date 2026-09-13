@@ -5,6 +5,7 @@
   "candidates": 8,
   "quarantine": 4,
   "reject_rate": 0.3333,
+  "selection_rate": 0.6667,
   "width_method_disagreements": 1,
   "grid_comparison": {
     "n": 4,
@@ -309,11 +310,13 @@
       "log": "data/aerial_review_log.csv"
     }
   },
-  "price_status": "official Electricity Authority final prices, ISL0661; unique UTC trading-period keys",
+  "price_status": "official EA final prices, ISL0661; 2025 is partial (17,472 / 17,520 periods)",
   "capture_rates": [
     {
       "year": 2019,
       "observations": 17520,
+      "expected_observations": 17520,
+      "complete_year": true,
       "mean_price_nzd_mwh": 115.5736,
       "solar_capture_rate": 1.1035,
       "seasonal_capture_rate": 1.0021,
@@ -326,6 +329,8 @@
     {
       "year": 2020,
       "observations": 17568,
+      "expected_observations": 17568,
+      "complete_year": true,
       "mean_price_nzd_mwh": 103.3158,
       "solar_capture_rate": 0.9791,
       "seasonal_capture_rate": 0.9358,
@@ -338,6 +343,8 @@
     {
       "year": 2021,
       "observations": 17520,
+      "expected_observations": 17520,
+      "complete_year": true,
       "mean_price_nzd_mwh": 171.1649,
       "solar_capture_rate": 0.9149,
       "seasonal_capture_rate": 0.9068,
@@ -350,6 +357,8 @@
     {
       "year": 2022,
       "observations": 17520,
+      "expected_observations": 17520,
+      "complete_year": true,
       "mean_price_nzd_mwh": 116.4483,
       "solar_capture_rate": 0.97,
       "seasonal_capture_rate": 0.9185,
@@ -362,6 +371,8 @@
     {
       "year": 2023,
       "observations": 17520,
+      "expected_observations": 17520,
+      "complete_year": true,
       "mean_price_nzd_mwh": 119.1147,
       "solar_capture_rate": 1.0452,
       "seasonal_capture_rate": 1.0593,
@@ -374,6 +385,8 @@
     {
       "year": 2024,
       "observations": 17568,
+      "expected_observations": 17568,
+      "complete_year": true,
       "mean_price_nzd_mwh": 208.9276,
       "solar_capture_rate": 0.8253,
       "seasonal_capture_rate": 0.8234,
@@ -386,6 +399,8 @@
     {
       "year": 2025,
       "observations": 17472,
+      "expected_observations": 17520,
+      "complete_year": false,
       "mean_price_nzd_mwh": 157.1919,
       "solar_capture_rate": 0.9216,
       "seasonal_capture_rate": 0.9389,
@@ -615,6 +630,14 @@
       "nz_market_year_rows": 17472
     }
   ],
+  "price_quality": {
+    "input_rows": 122688,
+    "aligned_rows": 122688,
+    "valid_price_rows": 122688,
+    "duplicate_utc_rows": 0,
+    "complete_market_years": 6,
+    "partial_market_years": 1
+  },
   "top_sites": [
     {
       "site_id": "DEMO-08",
@@ -627,7 +650,9 @@
       "road_proxy_m": 300.0,
       "rank_shift": 1,
       "solar_kwh_m2": 1450,
-      "screen_score": 0.9667
+      "screen_score": 0.95,
+      "centroid_easting": 1558215.0,
+      "centroid_northing": 5182820.0
     },
     {
       "site_id": "DEMO-05",
@@ -638,9 +663,11 @@
       "S05_hpl_flag": false,
       "grid_line_m": 0.0,
       "road_proxy_m": 300.0,
-      "rank_shift": 4,
+      "rank_shift": 2,
       "solar_kwh_m2": 1442,
-      "screen_score": 0.8667
+      "screen_score": 0.8,
+      "centroid_easting": 1550415.0,
+      "centroid_northing": 5182820.0
     },
     {
       "site_id": "DEMO-10",
@@ -653,7 +680,9 @@
       "road_proxy_m": 100.0,
       "rank_shift": 0,
       "solar_kwh_m2": 1446,
-      "screen_score": 0.6667
+      "screen_score": 0.625,
+      "centroid_easting": 1552925.0,
+      "centroid_northing": 5185140.0
     },
     {
       "site_id": "DEMO-03",
@@ -666,7 +695,9 @@
       "road_proxy_m": 990.0,
       "rank_shift": 2,
       "solar_kwh_m2": 1435,
-      "screen_score": 0.65
+      "screen_score": 0.6,
+      "centroid_easting": 1555705.0,
+      "centroid_northing": 5180260.0
     },
     {
       "site_id": "DEMO-02",
@@ -679,7 +710,9 @@
       "road_proxy_m": 1260.0,
       "rank_shift": 1,
       "solar_kwh_m2": 1426,
-      "screen_score": 0.6167
+      "screen_score": 0.575,
+      "centroid_easting": 1553015.0,
+      "centroid_northing": 5180420.0
     },
     {
       "site_id": "DEMO-07",
@@ -690,9 +723,11 @@
       "S05_hpl_flag": true,
       "grid_line_m": 3007.7,
       "road_proxy_m": 300.0,
-      "rank_shift": 6,
+      "rank_shift": 4,
       "solar_kwh_m2": 1432,
-      "screen_score": 0.4667
+      "screen_score": 0.4,
+      "centroid_easting": 1555525.0,
+      "centroid_northing": 5182740.0
     }
   ]
 }

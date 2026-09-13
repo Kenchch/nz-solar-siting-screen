@@ -14,3 +14,9 @@ def test_capture_rate_rejects_zero_output():
     with pytest.raises(ValueError):
         capture_rate(pd.Series([1.0, 2.0]), pd.Series([0.0, 0.0]))
 
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+def test_capture_rate_rejects_nonfinite_rows_instead_of_dropping_them(bad):
+    with pytest.raises(ValueError, match="non-finite"):
+        capture_rate(pd.Series([1.0, bad]), pd.Series([1.0, 1.0]))
+

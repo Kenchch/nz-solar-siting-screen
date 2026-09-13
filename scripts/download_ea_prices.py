@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,6 +18,25 @@ BASE = (
 )
 
 
+def validate_period_days(path: Path) -> None:
+    counts: Counter[str] = Counter()
+    seen: set[tuple[str, int]] = set()
+    with path.open("r", encoding="utf-8") as source:
+        for row in csv.DictReader(source):
+            date = row["trading_date"]
+            period = int(row["trading_period"])
+            key = (date, period)
+            if key in seen:
+                raise ValueError(f"{path.name}: duplicate trading date/period {key}")
+            seen.add(key)
+            counts[date] += 1
+    if not counts:
+        raise ValueError(f"{path.name}: no rows found for requested node")
+    invalid = {date: count for date, count in counts.items() if count not in {46, 48, 50}}
+    if invalid:
+        raise ValueError(f"{path.name}: incomplete trading days {invalid}")
+
+
 def fetch_month(yearmonth: str, node: str, output_dir: Path, market_timezone: str) -> Path:
     target = output_dir / f"{yearmonth}_{node}.csv"
     if target.exists() and target.stat().st_size > 100:
@@ -24,6 +44,7 @@ def fetch_month(yearmonth: str, node: str, output_dir: Path, market_timezone: st
             if {"trading_date", "trading_period", "timestamp_utc"} <= set(
                 next(csv.reader(cached))
             ):
+                validate_period_days(target)
                 return target
     filename = (
         "202512_FinalEnergyPrices_incomplete.csv"
@@ -62,6 +83,7 @@ def fetch_month(yearmonth: str, node: str, output_dir: Path, market_timezone: st
                 }
             )
         temp_path = Path(tmp.name)
+    validate_period_days(temp_path)
     temp_path.replace(target)
     return target
 
