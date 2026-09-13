@@ -1,0 +1,21 @@
+site_id,area_ha,transmission_m,distribution_m,road_m,transmission_rank,road_rank,transmission_road_rank_shift,latitude,longitude,basemaps_url,reviewed_on,reviewer,imagery,finding
+OSM-1477825593,61.3,0.0,554.0,1827.6,1,2350,2349,-43.676179,171.914577,"https://basemaps.linz.govt.nz/@-43.676179,171.914577,z16",2026-09-13,repository author,LINZ Basemaps aerial (Selwyn 0.2 m rural 2025),Irrigated pivot pasture on the true right of a braided riverbed. A transmission corridor crosses the block (transmission 0 m) and the nearest mapped road is 1.8 km away. The disagreement is real and the transmission rank is the informative one here.
+OSM-1106893529,214.2,18601.2,0.0,0.0,2312,1,2311,-43.841718,172.441313,"https://basemaps.linz.govt.nz/@-43.841718,172.441313,z16",2026-09-13,repository author,LINZ Basemaps aerial (Canterbury 0.25 m rural 2025),Coastal sand spit on a lagoon margin. Tagged landuse=meadow in OSM but it is bare gravel and dune with a formed track along it; not developable land at all. The road proxy ranks it first. This is the clearest example of why an OSM land-use polygon is not a parcel and why the aerial step cannot be skipped.
+OSM-1097487108,46.8,0.0,535.7,908.7,1,2305,2304,-43.818335,171.75018,"https://basemaps.linz.govt.nz/@-43.818335,171.75018,z16",2026-09-13,repository author,LINZ Basemaps aerial (Canterbury 0.2 m rural 2024),Irrigated cropping and centre-pivot country on the plains. Transmission crosses the block; the nearest mapped road is 0.9 km because rural roads here sit on a roughly 1 km grid. Plausible candidate; the road distance says nothing useful about connection.
+OSM-1094494330,53.5,0.0,754.4,864.4,1,2296,2295,-43.85855,171.934025,"https://basemaps.linz.govt.nz/@-43.85855,171.934025,z16",,,,
+OSM-1106893522,22.5,19749.3,1153.4,0.3,2323,46,2277,-43.841193,172.459401,"https://basemaps.linz.govt.nz/@-43.841193,172.459401,z16",,,,
+OSM-1106078242,90.1,24520.5,810.1,2.3,2335,63,2272,-43.741038,173.005322,"https://basemaps.linz.govt.nz/@-43.741038,173.005322,z16",,,,
+OSM-1094494329,58.0,0.0,266.3,727.9,1,2269,2268,-43.862872,171.926497,"https://basemaps.linz.govt.nz/@-43.862872,171.926497,z16",,,,
+OSM-1106081270,109.8,28834.5,1008.0,2.7,2341,74,2267,-43.7382,173.063114,"https://basemaps.linz.govt.nz/@-43.7382,173.063114,z16",,,,
+OSM-1094766046,44.3,0.0,388.7,657.4,1,2242,2241,-43.811915,172.011505,"https://basemaps.linz.govt.nz/@-43.811915,172.011505,z16",,,,
+OSM-1106078247,67.9,23671.0,0.0,3.2,2334,93,2241,-43.738024,172.990816,"https://basemaps.linz.govt.nz/@-43.738024,172.990816,z16",,,,
+OSM-1106121769,43.9,32149.3,0.0,3.7,2355,114,2241,-43.728641,173.100147,"https://basemaps.linz.govt.nz/@-43.728641,173.100147,z16",,,,
+OSM-1106166175,21.7,31179.9,0.0,3.6,2350,109,2241,-43.754466,173.095601,"https://basemaps.linz.govt.nz/@-43.754466,173.095601,z16",,,,
+OSM-1106454532,20.4,17479.6,667.0,1.7,2296,56,2240,-43.738945,172.902015,"https://basemaps.linz.govt.nz/@-43.738945,172.902015,z16",,,,
+OSM-1106078243,214.6,25577.4,560.5,3.4,2336,99,2237,-43.734918,173.023325,"https://basemaps.linz.govt.nz/@-43.734918,173.023325,z16",,,,
+OSM-1106454531,29.5,18163.0,191.6,2.8,2309,80,2229,-43.735647,172.909728,"https://basemaps.linz.govt.nz/@-43.735647,172.909728,z16",,,,
+OSM-1107584568,37.3,19821.8,64.4,3.4,2326,99,2227,-43.846607,172.365856,"https://basemaps.linz.govt.nz/@-43.846607,172.365856,z16",,,,
+OSM-1106701826,43.3,19516.9,440.7,3.5,2320,103,2217,-43.694986,172.919709,"https://basemaps.linz.govt.nz/@-43.694986,172.919709,z16",,,,
+OSM-1107203598,294.7,13997.9,7.5,0.0,2216,1,2215,-43.827686,172.509168,"https://basemaps.linz.govt.nz/@-43.827686,172.509168,z16",,,,
+OSM-1093992754,83.3,0.0,288.0,623.9,1,2215,2214,-43.896872,171.877158,"https://basemaps.linz.govt.nz/@-43.896872,171.877158,z16",,,,
+OSM-1481553192,20.6,13886.1,1464.7,0.0,2209,1,2208,-43.68089,172.837049,"https://basemaps.linz.govt.nz/@-43.68089,172.837049,z16",,,,
