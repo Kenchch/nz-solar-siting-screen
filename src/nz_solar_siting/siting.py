@@ -18,7 +18,7 @@ import pandas as pd
 from shapely.ops import unary_union
 
 from .geometry import area_hectares, has_width_core, mean_width_area_perimeter
-from .grid_distance import add_grid_proxies, verify_grid_flag
+from .grid_distance import add_grid_proxies, nearest_distance_m, verify_grid_flag
 from .load import assert_nztm
 
 
@@ -59,6 +59,11 @@ class SitingConfig:
     connection_tier: str = "subtransmission_33_66kv"
     excluded_voltage_v: float = 350_000.0
     voltage_column: str = "voltage"
+    # S-08 exclusion threshold, and S-10 review distance. The slope value itself
+    # is computed elsewhere and arrives as a column, so this module never needs
+    # a raster reader.
+    maximum_mean_slope_deg: float = 10.0
+    coastal_review_distance_m: float = 1000.0
     # Published for inspection and used to select review queues. Deliberately
     # not part of S-06: a threshold counted in ranks does not transfer between
     # sample sizes.
@@ -76,7 +81,23 @@ def evaluate_sites(
     powerlines: gpd.GeoDataFrame,
     roads: gpd.GeoDataFrame,
     config: SitingConfig | None = None,
+    terrain: pd.DataFrame | None = None,
+    water: gpd.GeoDataFrame | None = None,
+    coastline: gpd.GeoDataFrame | None = None,
 ) -> tuple[gpd.GeoDataFrame, pd.DataFrame]:
+    """Apply every rule in the register to one set of layers.
+
+    ``terrain`` is a table keyed on ``site_id`` carrying ``mean_slope_deg``,
+    produced by ``scripts/compute_site_terrain.py``. Slope arrives as a column
+    rather than as a raster on purpose: this module stays free of a raster
+    reader, so the library's dependency surface does not grow and CI never has
+    to download a DEM. A site with no slope value is neither excluded nor
+    quietly passed - S-08 leaves it in and raises ``S08_verify_slope``.
+
+    ``water`` and ``coastline`` are vector layers and are read directly.
+    Omitting any of the three leaves its rule unapplied and says so in the
+    audit, rather than reporting a pass it did not earn.
+    """
     cfg = config or SitingConfig()
     for name, frame in {
         "sites": sites,
@@ -85,6 +106,9 @@ def evaluate_sites(
         "roads": roads,
     }.items():
         assert_nztm(frame, name)
+    for name, frame in {"water": water, "coastline": coastline}.items():
+        if frame is not None:
+            assert_nztm(frame, name)
     required = {"site_id", "lcdb_class", "luc_class", "solar_kwh_m2"}
     missing = required - set(sites.columns)
     if missing:
@@ -128,8 +152,38 @@ def evaluate_sites(
     out["S05_hpl_flag"] = out["luc_class"].isin([1, 2, 3])
     out = add_grid_proxies(out, powerlines, roads, cfg)
 
-    exclude_columns = ["S01_pass", "S02_pass", "S03_pass", "S04_pass"]
-    rule_ids = ["S-01", "S-02", "S-03", "S-04"]
+    # S-08 slope. The value is precomputed into a per-site table, so a missing
+    # row is a gap in the inputs rather than a property of the land: it must not
+    # read as "this site is flat".
+    if terrain is not None:
+        if "site_id" not in terrain.columns or "mean_slope_deg" not in terrain.columns:
+            raise ValueError("terrain must carry site_id and mean_slope_deg")
+        slope = pd.to_numeric(
+            out["site_id"].map(
+                terrain.drop_duplicates("site_id").set_index("site_id")["mean_slope_deg"]
+            ),
+            errors="coerce",
+        )
+    else:
+        slope = pd.Series(np.nan, index=out.index, dtype=float)
+    out["mean_slope_deg"] = slope.round(3)
+    out["S08_pass"] = ~(slope > cfg.maximum_mean_slope_deg)
+    out["S08_verify_slope"] = slope.isna()
+
+    # S-09 mapped water, S-10 coastal proximity.
+    if water is not None and not water.empty:
+        out["water_m"] = nearest_distance_m(out, water).round(1)
+    else:
+        out["water_m"] = np.nan
+    out["S09_pass"] = ~(out["water_m"] <= 0.0)
+    if coastline is not None and not coastline.empty:
+        out["coastline_m"] = nearest_distance_m(out, coastline).round(1)
+    else:
+        out["coastline_m"] = np.nan
+    out["S10_coastal_flag"] = out["coastline_m"] < cfg.coastal_review_distance_m
+
+    exclude_columns = ["S01_pass", "S02_pass", "S03_pass", "S04_pass", "S08_pass", "S09_pass"]
+    rule_ids = ["S-01", "S-02", "S-03", "S-04", "S-08", "S-09"]
     failed = pd.DataFrame(
         {rule: ~out[column].astype(bool) for rule, column in zip(rule_ids, exclude_columns)},
         index=out.index,
@@ -161,8 +215,17 @@ def evaluate_sites(
     ) / weight_total
     out["screen_score"] = out["screen_score"].round(4)
 
+    out["rules_not_applied"] = ";".join(
+        rule for rule, supplied in (
+            ("S-08", terrain is not None),
+            ("S-09", water is not None),
+            ("S-10", coastline is not None),
+        ) if not supplied
+    )
+
     audit = out[[
-        "site_id", "status", "failed_rule_ids", "width_2ap_m", "width_core_pass",
-        "width_methods_disagree", "S05_hpl_flag", "S06_verify_grid",
+        "site_id", "status", "failed_rule_ids", "rules_not_applied",
+        "width_2ap_m", "width_core_pass", "width_methods_disagree",
+        "S05_hpl_flag", "S06_verify_grid", "S08_verify_slope", "S10_coastal_flag",
     ]].copy()
     return out, audit

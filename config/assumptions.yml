@@ -21,6 +21,16 @@ siting:
   voltage_column: voltage
   connection_tier: subtransmission_33_66kv
   excluded_voltage_v: 350000
+  # S-08: mean slope over the polygon, from a DEM sampled into a per-site table
+  # by scripts/compute_site_terrain.py. 10 degrees is well past the point where
+  # fixed-tilt racking needs terrain-following or earthworks; it is an
+  # exclusion, not a preference. A site with no slope value is not excluded and
+  # not passed either - it is flagged for verification.
+  maximum_mean_slope_deg: 10.0
+  # S-10: coastal hazard review. Not an exclusion - coastal land is not
+  # automatically undevelopable - but a 30-year asset within a kilometre of an
+  # open coast needs an erosion and inundation assessment before anything else.
+  coastal_review_distance_m: 1000.0
   voltage_tiers:
     transmission_110kv_plus:
       minimum_v: 110000
@@ -73,15 +83,6 @@ osm_study:
   # grid-proxy disagreements found that eleven were not developable land and
   # none of those failures was a grid problem. Thresholds were chosen with those
   # twenty labels in view, so the quoted hit rate is in-sample.
-  terrain:
-    # S-08: mean slope over the polygon, Copernicus GLO-30. 10 degrees is well
-    # past the point where fixed-tilt racking needs terrain-following or
-    # earthworks; it is an exclusion, not a preference.
-    maximum_mean_slope_deg: 10.0
-    # S-10: coastal hazard review. Not an exclusion - coastal land is not
-    # automatically undevelopable - but a 30-year asset within a kilometre of an
-    # open coast needs an erosion and inundation assessment before anything else.
-    coastal_review_distance_m: 1000.0
 
 # Real-data assembly. Both portals are Koordinates-based and both need a free
 # account and an API key that only the account holder can create: export them as

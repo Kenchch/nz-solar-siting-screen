@@ -7,6 +7,13 @@
   "reject_rate": 0.3333,
   "selection_rate": 0.6667,
   "width_method_disagreements": 1,
+  "rules_not_applied": [
+    "S-08",
+    "S-09",
+    "S-10"
+  ],
+  "slope_unknown": 12,
+  "coastal_review_flagged": 0,
   "grid_comparison": {
     "n": 4,
     "overlap_count": 2,
@@ -110,6 +117,7 @@
     },
     "verify_grid_flagged": 372,
     "terrain_water": {
+      "source": "nz_solar_siting.siting thresholds, the same the screen applies",
       "maximum_mean_slope_deg": 10.0,
       "coastal_review_distance_m": 1000.0,
       "median_mean_slope_deg": 0.77,

@@ -236,10 +236,8 @@ def main() -> None:
     sites["grid_line_m"] = sites[f"{connection_tier}_m"]
     sites["S06_verify_grid"] = verify_grid_flag(sites, config)
 
-    # Terrain and water. The aerial review found that none of the screen's worst
-    # false positives was a grid problem: they were steep, wet or coastal, and
-    # the baseline had no rule for any of that.
-    terrain_config = study_config["terrain"]
+    # Terrain and water come from the library, the same implementation the screen
+    # uses, so the study cannot drift away from what solar-screen applies.
     terrain = pd.read_csv(osm_dir / "site_terrain.csv")
     sites = sites.merge(terrain, on="site_id", how="left", validate="one_to_one")
     if sites["mean_slope_deg"].isna().any():
@@ -248,10 +246,10 @@ def main() -> None:
         )
     sites["water_m"] = nearest_distance_m(sites, wetland).round(1)
     sites["coastline_m"] = nearest_distance_m(sites, coastline).round(1)
-    maximum_slope = float(terrain_config["maximum_mean_slope_deg"])
-    coastal_review = float(terrain_config["coastal_review_distance_m"])
-    sites["S08_slope_pass"] = sites["mean_slope_deg"] <= maximum_slope
-    sites["S09_water_pass"] = sites["water_m"] > 0.0
+    maximum_slope = config.maximum_mean_slope_deg
+    coastal_review = config.coastal_review_distance_m
+    sites["S08_slope_pass"] = ~(sites["mean_slope_deg"] > maximum_slope)
+    sites["S09_water_pass"] = ~(sites["water_m"] <= 0.0)
     sites["S10_coastal_flag"] = sites["coastline_m"] < coastal_review
     sites["terrain_water_pass"] = sites["S08_slope_pass"] & sites["S09_water_pass"]
 
@@ -306,6 +304,7 @@ def main() -> None:
         },
         "verify_grid_flagged": int(sites["S06_verify_grid"].sum()),
         "terrain_water": {
+            "source": "nz_solar_siting.siting thresholds, the same the screen applies",
             "maximum_mean_slope_deg": maximum_slope,
             "coastal_review_distance_m": coastal_review,
             "median_mean_slope_deg": round(float(sites["mean_slope_deg"].median()), 2),

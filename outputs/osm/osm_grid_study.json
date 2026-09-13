@@ -87,6 +87,7 @@
   },
   "verify_grid_flagged": 372,
   "terrain_water": {
+    "source": "nz_solar_siting.siting thresholds, the same the screen applies",
     "maximum_mean_slope_deg": 10.0,
     "coastal_review_distance_m": 1000.0,
     "median_mean_slope_deg": 0.77,

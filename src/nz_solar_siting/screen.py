@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import sqlite3
 import geopandas as gpd
+import pandas as pd
 
 from .config import load_project_config
 from .demo_data import build_demo_layers
@@ -36,8 +37,14 @@ def run_screening(
     config: SitingConfig | None = None,
     top_n_comparison: int = 10,
     scope: str = "screening results",
+    terrain: pd.DataFrame | None = None,
+    water: gpd.GeoDataFrame | None = None,
+    coastline: gpd.GeoDataFrame | None = None,
 ) -> dict[str, object]:
-    results, audit = evaluate_sites(sites, conservation, powerlines, roads, config)
+    results, audit = evaluate_sites(
+        sites, conservation, powerlines, roads, config,
+        terrain=terrain, water=water, coastline=coastline,
+    )
     reject_rate = float((results["status"] == "quarantine").mean())
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
@@ -56,6 +63,11 @@ def run_screening(
         "reject_rate": round(reject_rate, 4),
         "selection_rate": round(1.0 - reject_rate, 4),
         "width_method_disagreements": int(results["width_methods_disagree"].sum()),
+        "rules_not_applied": [
+            rule for rule in str(results["rules_not_applied"].iloc[0]).split(";") if rule
+        ] if len(results) else [],
+        "slope_unknown": int(results["S08_verify_slope"].sum()),
+        "coastal_review_flagged": int(results["S10_coastal_flag"].sum()),
         "grid_comparison": comparison,
     }
     (output / "run_manifest.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
@@ -70,6 +82,13 @@ def main() -> None:
     parser.add_argument("--conservation", help="Conservation polygon layer")
     parser.add_argument("--powerlines", help="Powerline layer")
     parser.add_argument("--roads", help="Road proxy layer")
+    parser.add_argument(
+        "--terrain",
+        help="CSV with site_id and mean_slope_deg, from scripts/compute_site_terrain.py. "
+             "Without it S-08 is not applied and every site is flagged slope-unknown.",
+    )
+    parser.add_argument("--water", help="Mapped water and wetland polygons for S-09")
+    parser.add_argument("--coastline", help="Coastline for the S-10 proximity flag")
     parser.add_argument("--config", default="config/assumptions.yml")
     parser.add_argument("--output", help="Output directory (defaults to outputs/demo or outputs/real)")
     args = parser.parse_args()
@@ -95,6 +114,9 @@ def main() -> None:
     result = run_screening(
         *layers, output, config=project.siting,
         top_n_comparison=top_n, scope=scope,
+        terrain=pd.read_csv(args.terrain) if args.terrain else None,
+        water=read_layer(args.water, name="water") if args.water else None,
+        coastline=read_layer(args.coastline, name="coastline") if args.coastline else None,
     )
     print(json.dumps(result, indent=2))
 

@@ -282,11 +282,17 @@ Three things about it are worth knowing before the first run:
 **Status of the live run.** It has been run end to end. 27,452 LCDB polygons in
 the study bbox became **1,166 candidate sites** with all four attributes (9 more
 had no LUC or solar value and went to `sites_unattributed`), and the screen
-returned **632 candidates and 534 quarantined**. Sampled LENZ values land at
+returned **404 candidates and 762 quarantined**. Sampled LENZ values land at
 1,325–1,441 kWh/m²/yr, which is the range the demo fixtures were written to.
-**S-05 now has real land behind it: 237 of the 632 candidates are LUC 1–3**, so
+**S-05 now has real land behind it: 197 of the 404 candidates are LUC 1–3**, so
 the NPS-HPL flag is finally pointing at actual Canterbury paddocks rather than
 at twelve rectangles.
+
+The first version of that run returned 632 candidates, because S-08, S-09 and
+S-10 existed only in the study script and `solar-screen` never applied them.
+With all ten rules in the library, slope removes a further **319** sites and
+mapped water **233**. That is the size of the hole: a third of what the screen
+was calling candidates was steep or wet.
 
 The assembled layers and the screening outputs are **not committed**. LCDB and
 NZLRI come from the LRIS portal under its item terms, which this project does
@@ -306,11 +312,19 @@ Three things the real run exposed that the demo could not:
   records as `all_mapped_powerlines`. The ρ = 0.11 connection-tier finding is
   reproducible on OpenStreetMap, which tags voltage, and **not** on LINZ, which
   does not. That is worth knowing before quoting it as a LINZ result.
-- **S-08, S-09 and S-10 do not run in `solar-screen`.** They live in the OSM
-  study entry point, so the real run applied S-01 to S-07 only — and 137 of its
-  632 candidates have a mean slope above the 10° exclusion threshold. The
-  terrain table is computed and sitting beside them; wiring the three rules into
-  `evaluate_sites` is the next change.
+- **S-08, S-09 and S-10 now run in `solar-screen`.** They used to live only in
+  the OSM study entry point, so the first real run applied S-01 to S-07 and kept
+  137 candidates above the 10° slope threshold. They are in `evaluate_sites`,
+  and the run above is the result.
+
+  Slope stays a **precomputed column**, not a raster read: `evaluate_sites`
+  takes `mean_slope_deg` from the table `scripts/compute_site_terrain.py`
+  writes, so the library never imports a raster reader and CI never downloads a
+  DEM. Water and coastline are vector and go in directly. Omitting any of the
+  three leaves its rule unapplied and **says so** — `rules_not_applied` in the
+  manifest and the audit, and a site with no slope value raises
+  `S08_verify_slope` rather than passing S-08 by default. A rule that is not
+  applied should never read as a rule that was satisfied.
 
 `tests/test_real_sites.py` exercises the assembly on layers shaped like the real
 ones — publisher column spellings, multipart polygons, sites outside every
@@ -428,7 +442,7 @@ The market series are different: both the ISL0661 half-hourly final prices and t
 
 ## Validation
 
-One hundred and thirty-seven automated tests cover shared configuration and both CLIs, CRS/schema/geometry gates, exclusion and flag rules, both width methods, candidate-only ranking, spatial-indexed nearest distance, configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, strict market-value input validity, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry, seasonal/intraday decomposition, the metered load control, sensitivities, OSM voltage tiers, terrain and water rules, aerial-review evidence, the real-data assembly path against fixtures — publisher column spellings, multipart splitting, geometry-derived identifiers, the refusal to run without an API key, on a placeholder key or on an implausibly short one, and portal errors that name the status without echoing the key, that every third-party import is declared in `pyproject.toml` including the two that are imported lazily inside functions, that `environment.yml` matches — the rule register as a contract against the library that implements it, the single S-06 implementation and its refusal to flag on rank shift, the held-out sample B scorecard, and top-to-bottom notebook execution.
+One hundred and forty-three automated tests cover shared configuration and both CLIs, CRS/schema/geometry gates, exclusion and flag rules, both width methods, candidate-only ranking, spatial-indexed nearest distance, configurable score weights and the absence of grid distance from the score, 46/48/50-period days, UTC uniqueness, strict market-value input validity, committed-input market-year accounting, merge row conservation, January NZDT peak timing, period-midpoint evaluation, tilt geometry, seasonal/intraday decomposition, the metered load control, sensitivities, OSM voltage tiers, terrain and water rules, aerial-review evidence, the real-data assembly path against fixtures — publisher column spellings, multipart splitting, geometry-derived identifiers, the refusal to run without an API key, on a placeholder key or on an implausibly short one, and portal errors that name the status without echoing the key, that every third-party import is declared in `pyproject.toml` including the two that are imported lazily inside functions, that `environment.yml` matches — the rule register as a contract against the library that implements it — every registered rule now has to have a column in evaluate_sites, which is what caught S-08 to S-10 living only in a script — the single S-06 implementation and its refusal to flag on rank shift, the held-out sample B scorecard, and top-to-bottom notebook execution.
 
 GitHub Actions installs the committed lock, reruns both complete pipelines and compares the full tracked output-file manifest. It strictly diffs CSV/JSON; because GeoPackage and PNG bytes vary across operating systems, `scripts/verify_reproduced_outputs.py` compares GeoPackages by fields and geometry and applies a bounded pixel-difference check to every generated figure. Binary outputs are therefore covered without requiring byte-identical cross-platform files.
 

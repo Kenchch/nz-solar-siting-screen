@@ -31,8 +31,65 @@ CONFIG = load_project_config(ROOT / "config" / "assumptions.yml")
 
 @pytest.fixture(scope="module")
 def demo_results():
-    results, audit = evaluate_sites(*build_demo_layers(), CONFIG.siting)
+    """The demo layers, with terrain, water and coastline supplied.
+
+    The register calls S-08 and S-09 exclusions, so they need inputs to be
+    exercised at all. The fixtures are deliberately crude: one steep site and
+    one wet site, because the point is that the rules run in evaluate_sites and
+    not that the demo geometry is realistic.
+    """
+    sites, conservation, powerlines, roads = build_demo_layers()
+    terrain = pd.DataFrame({
+        "site_id": sites["site_id"],
+        "mean_slope_deg": [0.5] * (len(sites) - 1) + [22.0],
+    })
+    first = sites.geometry.iloc[0]
+    water = gpd.GeoDataFrame(
+        {"kind": ["lake"]},
+        geometry=[first.buffer(-50.0)], crs="EPSG:2193",
+    )
+    minx, miny, maxx, maxy = sites.total_bounds
+    coastline = gpd.GeoDataFrame(
+        {"kind": ["coast"]},
+        geometry=[LineString([(minx - 5000, miny - 400), (maxx + 5000, miny - 400)])],
+        crs="EPSG:2193",
+    )
+    results, audit = evaluate_sites(
+        sites, conservation, powerlines, roads, CONFIG.siting,
+        terrain=terrain, water=water, coastline=coastline,
+    )
     return results, audit
+
+
+def test_an_omitted_rule_input_is_declared_not_silently_passed():
+    """Leaving out terrain must not look like every site passed S-08."""
+    results, audit = evaluate_sites(*build_demo_layers(), CONFIG.siting)
+    assert set(str(results["rules_not_applied"].iloc[0]).split(";")) == {"S-08", "S-09", "S-10"}
+    assert results["S08_verify_slope"].all(), "unknown slope must flag for verification"
+    assert not results["failed_rule_ids"].str.contains("S-08").any()
+    assert "rules_not_applied" in audit.columns
+
+
+def test_slope_excludes_and_a_missing_value_flags(demo_results):
+    results, _ = demo_results
+    steep = results[results["mean_slope_deg"] > CONFIG.siting.maximum_mean_slope_deg]
+    assert len(steep) == 1
+    assert steep["failed_rule_ids"].str.contains("S-08").all()
+    assert not results["S08_verify_slope"].any(), "every site had a slope value here"
+
+
+def test_mapped_water_excludes(demo_results):
+    results, _ = demo_results
+    wet = results[results["water_m"] <= 0.0]
+    assert not wet.empty
+    assert wet["failed_rule_ids"].str.contains("S-09").all()
+
+
+def test_coastal_proximity_flags_but_never_excludes(demo_results):
+    results, _ = demo_results
+    flagged = results[results["S10_coastal_flag"]]
+    assert not flagged.empty
+    assert not flagged["failed_rule_ids"].str.contains("S-10").any()
 
 
 def test_every_registered_rule_id_is_unique_and_ordered():
@@ -41,7 +98,7 @@ def test_every_registered_rule_id_is_unique_and_ordered():
     assert len(ids) == len(set(ids))
 
 
-@pytest.mark.parametrize("rule_id", ["S-01", "S-02", "S-03", "S-04"])
+@pytest.mark.parametrize("rule_id", ["S-01", "S-02", "S-03", "S-04", "S-08", "S-09"])
 def test_exclusion_rules_quarantine_and_are_named_in_the_audit(rule_id, demo_results):
     """An 'exclude' row must be able to put its own id into failed_rule_ids."""
     assert REGISTER[rule_id]["rule_type"] == "exclude"
@@ -106,14 +163,10 @@ def test_rules_the_register_calls_testable_have_an_implementation(demo_results):
     implemented = {
         "S-01": "S01_pass", "S-02": "S02_pass", "S-03": "S03_pass", "S-04": "S04_pass",
         "S-05": "S05_hpl_flag", "S-06": "S06_verify_grid", "S-07": "solar_rank",
+        "S-08": "S08_pass", "S-09": "S09_pass", "S-10": "S10_coastal_flag",
     }
     for rule_id, row in REGISTER.items():
         if row["testable_from_open_data"] != "yes":
             continue
-        if rule_id in implemented:
-            assert implemented[rule_id] in columns, rule_id
-        else:
-            # S-08 to S-10 run in the study entry point, not in evaluate_sites.
-            assert rule_id in {"S-08", "S-09", "S-10"}, rule_id
-            study = (ROOT / "scripts" / "osm_grid_study.py").read_text(encoding="utf-8")
-            assert rule_id.replace("-", "") in study, rule_id
+        assert rule_id in implemented, f"{rule_id} is registered but has no column"
+        assert implemented[rule_id] in columns, rule_id

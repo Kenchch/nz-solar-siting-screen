@@ -6,7 +6,7 @@ S-04,Outside public conservation land,DOC Public Conservation Areas,exclude,No m
 S-05,Highly productive land flag,NPS-HPL 2022 amended Dec 2025,flag,LUC 1/2/3,yes,retain with consenting review flag
 S-06,Distance to grid data,LINZ Topo50 powerlines and road-centreline proxy; any layer carrying a voltage attribute is tiered,rank+flag,Per-voltage-tier nearest distances in metres; one implementation in grid_distance.verify_grid_flag flags on connection-tier distance against that tier's review_distance_m (grid_distance_review_m only where the layer carries no voltage attribute); unknown distance also flags; rank_shift is published but never triggers; excluded from screen_score,yes,retain with verify-grid flag
 S-07,Mean annual solar radiation,LENZ mean annual solar radiation,rank,Higher is better; weighted screen_score_weights.solar_resource in review ordering,yes,retain and rank
-S-08,Mean slope,Copernicus GLO-30 DEM,exclude,Mean slope over the polygon above maximum_mean_slope_deg,yes,quarantine
+S-08,Mean slope,Copernicus GLO-30 DEM sampled per site by scripts/compute_site_terrain.py,exclude,Mean slope over the polygon above maximum_mean_slope_deg; a site with no slope value is not excluded and raises S08_verify_slope instead,yes,quarantine
 S-09,Mapped water or wetland,OpenStreetMap natural=water/wetland and landuse=basin,exclude,Any intersection with mapped standing water or wetland,yes,quarantine
 S-10,Coastal hazard proximity,OpenStreetMap natural=coastline,flag,Within coastal_review_distance_m of the open coast,yes,retain with coastal-hazard review flag
 

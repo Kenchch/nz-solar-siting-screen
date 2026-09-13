@@ -55,6 +55,8 @@ def load_project_config(path: str | Path) -> ProjectConfig:
         connection_tier=connection_tier,
         excluded_voltage_v=float(values["excluded_voltage_v"]),
         voltage_column=str(values["voltage_column"]),
+        maximum_mean_slope_deg=float(values["maximum_mean_slope_deg"]),
+        coastal_review_distance_m=float(values["coastal_review_distance_m"]),
         solar_score_weight=float(weights["solar_resource"]),
         area_score_weight=float(weights["area"]),
     )
