@@ -78,6 +78,7 @@ def run_screening(
         ] if len(results) else [],
         "slope_unknown": int(results["S08_verify_slope"].sum()),
         "hpl_flagged": int(results["S05_hpl_flag"].sum()),
+        "luc_coverage_unverified": int(results["S05_verify_luc"].sum()),
         "s05_basis": sorted(set(results["s05_basis"])) if len(results) else [],
         "s04_reconciliation": results.attrs.get("s04_reconciliation", {}),
         "coastal_review_flagged": int(results["S10_coastal_flag"].sum()),

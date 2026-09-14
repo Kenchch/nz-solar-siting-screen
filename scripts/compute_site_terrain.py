@@ -43,7 +43,7 @@ import yaml
 from rasterio.features import geometry_mask
 from rasterio.windows import from_bounds
 
-from nz_solar_siting.geometry import area_hectares, has_width_core
+from nz_solar_siting.geometry import area_hectares, geometry_sha256, has_width_core
 from nz_solar_siting.load import read_layer
 from nz_solar_siting.osm_layers import read_osm_layer
 from nz_solar_siting.siting import SitingConfig
@@ -201,6 +201,7 @@ def main() -> None:
                     "samples": values,
                 })
 
+
     # A polygon straddling a tile boundary is sampled once per tile. Keeping
     # only the better-sampled row would report the mean of the larger fragment
     # as the mean of the site; pooling the samples measures the whole polygon.
@@ -211,11 +212,15 @@ def main() -> None:
         )
         entry["tiles"].append(record["dem_tile"])
         entry["samples"].append(record["samples"])
+    digests = dict(zip(sites["site_id"], sites.geometry.map(geometry_sha256)))
     rows = []
     for entry in pooled.values():
         values = np.concatenate(entry["samples"])
         rows.append({
             "site_id": entry["site_id"],
+            # The geometry the slope was actually averaged over, so the screen
+            # can check the join rather than trust the identifier alone.
+            "geometry_sha256": digests[entry["site_id"]],
             "dem_tile": ";".join(sorted(set(entry["tiles"]))),
             "dem_tiles_used": len(set(entry["tiles"])),
             "slope_samples": int(values.size),

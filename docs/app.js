@@ -188,7 +188,12 @@ fetch("data.json")
     dataset = data;
     document.querySelector("#candidate-count").textContent = data.candidates;
     document.querySelector("#total-count").textContent = data.total;
-    document.querySelector("#grid-overlap").textContent = Number(data.grid_comparison.jaccard).toFixed(2);
+    // A null jaccard means neither shortlist could be drawn, which Number()
+    // turns into 0 and toFixed renders as "0.00" - a measurement of perfect
+    // disagreement, published from no measurement at all.
+    const jaccard = data.grid_comparison.jaccard;
+    document.querySelector("#grid-overlap").textContent =
+      typeof jaccard === "number" && Number.isFinite(jaccard) ? jaccard.toFixed(2) : "N/A";
     const latest = [...data.capture_rates].reverse().find(row => row.complete_year);
     document.querySelector("#latest-capture").textContent = `${(latest.solar_capture_rate * 100).toFixed(0)}%`;
     document.querySelector("#latest-year").textContent = latest.year;

@@ -52,3 +52,27 @@ def test_preprocessed_real_layer_cli_runs(monkeypatch, tmp_path):
 def test_dashboard_selects_latest_complete_year():
     javascript = (ROOT / "docs/app.js").read_text(encoding="utf-8")
     assert "find(row => row.complete_year)" in javascript
+
+
+def test_the_dashboard_does_not_render_an_unmeasured_overlap_as_zero():
+    """compare_top_n returns null when neither shortlist could be drawn.
+
+    Number(null) is 0 and toFixed(2) renders "0.00", so a run that measured no
+    grid distance at all would have published perfect disagreement as a figure.
+    """
+    javascript = (ROOT / "docs/app.js").read_text(encoding="utf-8")
+    assert "Number(data.grid_comparison.jaccard).toFixed" not in javascript, (
+        "the unguarded conversion is back"
+    )
+    assert "Number.isFinite(jaccard)" in javascript
+    assert '"N/A"' in javascript
+
+
+def test_the_screen_reports_how_much_luc_coverage_was_unverified(tmp_path):
+    """A count in the manifest, so an incomplete overlay is visible per run."""
+    from nz_solar_siting.screen import run_screening
+
+    sites, conservation, powerlines, roads = build_demo_layers()
+    summary = run_screening(sites, conservation, powerlines, roads, tmp_path)
+    assert "luc_coverage_unverified" in summary
+    assert summary["luc_coverage_unverified"] == 0, "the demo runs on dominant class"
