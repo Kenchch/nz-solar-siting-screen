@@ -78,6 +78,32 @@ def fetch_tile(lat: int, lon: int, cache: Path) -> Path | None:
     return path
 
 
+def required_tiles(bounds: pd.DataFrame) -> list[tuple[int, int]]:
+    """Every 1 degree tile any polygon touches, not just its two corners.
+
+    The previous version took each polygon's south-west and north-east corner.
+    That is the whole set only while a polygon crosses at most one tile line: a
+    bounding box that crosses a parallel *and* a meridian sits in four tiles and
+    the diagonal names two of them, so the other two were never downloaded and
+    the part of the polygon inside them was never sampled. A box wider than a
+    degree skips whole tiles in the middle for the same reason.
+
+    Both cases are out of reach for a Canterbury parcel against 1 degree tiles,
+    which is why nothing caught this. It is wrong for a larger study area or a
+    finer tiling, and the full range costs nothing to enumerate.
+    """
+    tiles: set[tuple[int, int]] = set()
+    for miny, minx, maxy, maxx in zip(
+        bounds["miny"], bounds["minx"], bounds["maxy"], bounds["maxx"]
+    ):
+        if not all(math.isfinite(value) for value in (miny, minx, maxy, maxx)):
+            continue
+        for lat in range(int(math.floor(miny)), int(math.floor(maxy)) + 1):
+            for lon in range(int(math.floor(minx)), int(math.floor(maxx)) + 1):
+                tiles.add((lat, lon))
+    return sorted(tiles)
+
+
 def slope_degrees(elevation: np.ndarray, transform, latitude_deg: float) -> np.ndarray:
     """Slope magnitude in degrees on a geographic grid."""
     metres_per_degree_lat = 111_132.0
@@ -131,14 +157,7 @@ def main() -> None:
     geographic = sites.to_crs("EPSG:4326")
     print(f"{len(sites)} sites passing area and width", flush=True)
 
-    bounds = geographic.geometry.bounds
-    needed = sorted({
-        (int(math.floor(lat)), int(math.floor(lon)))
-        for lat, lon in zip(bounds["miny"], bounds["minx"])
-    } | {
-        (int(math.floor(lat)), int(math.floor(lon)))
-        for lat, lon in zip(bounds["maxy"], bounds["maxx"])
-    })
+    needed = required_tiles(geographic.geometry.bounds)
     print(f"DEM tiles required: {len(needed)}", flush=True)
 
     records: list[dict[str, object]] = []

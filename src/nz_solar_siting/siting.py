@@ -311,15 +311,27 @@ def evaluate_sites(
     if terrain is not None:
         if "site_id" not in terrain.columns or "mean_slope_deg" not in terrain.columns:
             raise ValueError("terrain must carry site_id and mean_slope_deg")
+        # The table is keyed on site_id, and two rows for one site disagree
+        # about the land. Keeping the first meant the answer depended on the
+        # order the rows happened to sit in the file - and a slope that decides
+        # an exclusion must not be decided by that. The producing script
+        # already refuses a duplicated site_id on the way in; this refuses one
+        # on the way out, which is where two tables concatenated by hand arrive.
+        duplicated = terrain["site_id"].astype(str).duplicated(keep=False)
+        if duplicated.any():
+            example = terrain.loc[duplicated, "site_id"].iloc[0]
+            raise ValueError(
+                f"terrain has {int(duplicated.sum())} rows sharing a site_id, first "
+                f"{example!r}. The table is keyed on site_id, so a duplicate makes the "
+                "screened slope depend on row order; de-duplicate it before screening."
+            )
         if supplied_column:
             raise ValueError(
                 "mean_slope_deg is present on sites and a terrain table was also given; "
                 "pass one or the other so it is unambiguous which slope was screened"
             )
         slope = pd.to_numeric(
-            out["site_id"].map(
-                terrain.drop_duplicates("site_id").set_index("site_id")["mean_slope_deg"]
-            ),
+            out["site_id"].map(terrain.set_index("site_id")["mean_slope_deg"]),
             errors="coerce",
         )
     elif supplied_column:
