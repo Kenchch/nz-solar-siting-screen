@@ -48,7 +48,7 @@ siting:
   # demo path only. It is a count of ranks, so it does not transfer between
   # sample sizes: 3 is meaningful across eight demo fixtures and fires on
   # essentially every site at n = 2,356. The OSM study deliberately does not use
-  # it; see osm_study below.
+  # it; scripts/osm_grid_study.py says so where it builds the flag.
   rank_shift_review: 3
   # Review-ordering weights. Grid distance is intentionally excluded from the
   # score and published as distances plus a verify flag instead.
@@ -74,15 +74,17 @@ solar:
     - 1.3
   timestep_minutes: 30
 
-# The OpenStreetMap substitute study. Tier boundaries are in volts and follow
-# what a connection decision actually distinguishes, not what OSM tags happen to
-# record: a Canterbury project of tens of megawatts connects at 33 or 66 kV, not
-# at 220 kV and certainly not to an HVDC pole.
-osm_study:
-  # Terrain and water rules, added after an aerial review of the twenty largest
-  # grid-proxy disagreements found that eleven were not developable land and
-  # none of those failures was a grid problem. Thresholds were chosen with those
-  # twenty labels in view, so the quoted hit rate is in-sample.
+# The OpenStreetMap substitute study reads the siting block above and nothing
+# else: the voltage tiers, the slope threshold and the coastal review distance
+# are the same values the screen applies, so the study cannot drift away from
+# what solar-screen does. It used to have an `osm_study:` key of its own here
+# that held only a comment, parsed to null, and was read into a variable the
+# script never used - a settings section that configured nothing.
+#
+# The terrain and water thresholds above were chosen after an aerial review of
+# the twenty largest grid-proxy disagreements found that eleven were not
+# developable land and that none of those failures was a grid problem. They were
+# chosen with those twenty labels in view, so the quoted hit rate is in-sample.
 
 # Real-data assembly. Both portals are Koordinates-based and both need a free
 # account and an API key that only the account holder can create: export them as

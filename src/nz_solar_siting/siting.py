@@ -117,6 +117,17 @@ def evaluate_sites(
         raise ValueError("sites.site_id contains missing or blank values")
     if sites["site_id"].astype(str).duplicated().any():
         raise ValueError("sites.site_id must be unique")
+    # Every per-site distance is a spatial join collapsed back onto one row per
+    # site. Two rows sharing an index label collapse into one another, and both
+    # then report the nearest distance either of them had - a silent wrong
+    # number, not an error. explode() leaves exactly such an index behind, so
+    # this is the state a caller following the multipart advice below lands in.
+    if not sites.index.is_unique:
+        raise ValueError(
+            "sites has a non-unique index; distances are joined per row, so duplicate "
+            "index labels would silently give sites each other's distances. "
+            "Call reset_index(drop=True) before screening."
+        )
     # S-01 and S-02 are about one contiguous block of land. A MultiPolygon's
     # area is the sum of its parts, so two 10 ha squares five kilometres apart
     # would pass a 20 ha rule and a width test neither part can satisfy. The
@@ -128,7 +139,7 @@ def evaluate_sites(
         raise ValueError(
             f"sites contains {int(multipart.sum())} MultiPolygon features, first {example!r}. "
             "Area and width are contiguity rules; explode multiparts before screening "
-            "(GeoDataFrame.explode(index_parts=False))."
+            "(GeoDataFrame.explode(index_parts=False).reset_index(drop=True))."
         )
     if not sites.geom_type.eq("Polygon").all():
         raise ValueError("sites geometry must contain only Polygon features")
@@ -159,10 +170,30 @@ def evaluate_sites(
     if conservation.empty:
         out["S04_pass"] = True
     else:
+        # The register asks for a *material* intersection; "intersects" is also
+        # true of a shared boundary, which is an overlap of nothing at all. The
+        # spatial index still finds the candidate pairs and only those pairs are
+        # intersected, so the national layer is still never unioned.
+        #
+        # Measured, this releases nobody: on the 10,684 cadastral units all
+        # 1,473 conservation hits have a positive overlap, because two
+        # independently digitised LINZ layers do not share exact edges. What
+        # they do share is slivers - 1,103 of those 1,473 overlap by 1 m2 or
+        # less - and "> 0" does not touch those either. So this closes the gap
+        # between the code and the register without yet answering what
+        # "material" should mean; see the sliver note in the README.
+        neighbours = conservation.geometry.reset_index(drop=True)
         hits = gpd.sjoin(
-            out[["geometry"]], conservation[["geometry"]], how="inner", predicate="intersects"
+            out[["geometry"]],
+            gpd.GeoDataFrame(geometry=neighbours, crs=conservation.crs),
+            how="inner", predicate="intersects",
         )
-        out["S04_pass"] = ~out.index.isin(hits.index.unique())
+        matched = gpd.GeoSeries(
+            neighbours.to_numpy()[hits["index_right"].to_numpy()],
+            index=hits.index, crs=conservation.crs,
+        )
+        overlap_m2 = out.geometry.loc[hits.index].intersection(matched, align=False).area
+        out["S04_pass"] = ~out.index.isin(hits.index[overlap_m2.to_numpy() > 0.0])
     out["solar_kwh_m2"] = solar
     out["luc_class"] = luc
     out["S05_hpl_flag"] = out["luc_class"].isin([1, 2, 3])
@@ -196,17 +227,23 @@ def evaluate_sites(
     out["S08_pass"] = ~(slope > cfg.maximum_mean_slope_deg)
     out["S08_verify_slope"] = slope.isna()
 
-    # S-09 mapped water, S-10 coastal proximity.
+    # S-09 mapped water, S-10 coastal proximity. Round for publication, compare
+    # on the measurement - the same order S-01 already follows. It matters most
+    # for S-09, whose threshold is zero: a site 4 cm from a mapped lake rounds
+    # to 0.0 m and used to be quarantined for intersecting water it does not
+    # touch.
     if water is not None and not water.empty:
-        out["water_m"] = nearest_distance_m(out, water).round(1)
+        water_m = nearest_distance_m(out, water)
     else:
-        out["water_m"] = np.nan
-    out["S09_pass"] = ~(out["water_m"] <= 0.0)
+        water_m = pd.Series(np.nan, index=out.index, dtype=float)
+    out["water_m"] = water_m.round(1)
+    out["S09_pass"] = ~(water_m <= 0.0)
     if coastline is not None and not coastline.empty:
-        out["coastline_m"] = nearest_distance_m(out, coastline).round(1)
+        coastline_m = nearest_distance_m(out, coastline)
     else:
-        out["coastline_m"] = np.nan
-    out["S10_coastal_flag"] = out["coastline_m"] < cfg.coastal_review_distance_m
+        coastline_m = pd.Series(np.nan, index=out.index, dtype=float)
+    out["coastline_m"] = coastline_m.round(1)
+    out["S10_coastal_flag"] = coastline_m < cfg.coastal_review_distance_m
 
     exclude_columns = ["S01_pass", "S02_pass", "S03_pass", "S04_pass", "S08_pass", "S09_pass"]
     rule_ids = ["S-01", "S-02", "S-03", "S-04", "S-08", "S-09"]

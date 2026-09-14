@@ -93,3 +93,87 @@ def test_the_terrain_table_pools_samples_across_dem_tiles():
     straddling = terrain[terrain["dem_tiles_used"] > 1]
     assert not straddling.empty, "the study area does span more than one tile"
     assert straddling["dem_tile"].str.contains(";").all(), "both tiles must be named"
+
+
+def test_a_non_unique_index_is_refused_rather_than_silently_shared():
+    """Two sites on one index label used to be given each other's distances."""
+    side = math.sqrt(50 * 10_000)
+    sites = gpd.GeoDataFrame(
+        {"site_id": ["A", "B"], "lcdb_class": ["Short-rotation Cropland"] * 2,
+         "luc_class": [3, 3], "solar_kwh_m2": [1400.0, 1500.0]},
+        geometry=[box(X, Y, X + side, Y + side),
+                  box(X + 3000, Y + 5000, X + 3000 + side, Y + 5000 + side)],
+        crs="EPSG:2193",
+    )
+    sites.index = [0, 0]
+    with pytest.raises(ValueError, match="non-unique index"):
+        evaluate_sites(sites, EMPTY, NETWORK, NETWORK)
+
+
+def test_the_multipart_refusal_names_a_remedy_that_leaves_a_usable_index():
+    """explode() alone duplicates the index, which is the failure above."""
+    far_apart = MultiPolygon([box(X, Y, X + 320, Y + 320), box(X + 5000, Y, X + 5320, Y + 320)])
+    with pytest.raises(ValueError) as raised:
+        evaluate_sites(_sites(far_apart), EMPTY, NETWORK, NETWORK)
+    assert "reset_index(drop=True)" in str(raised.value)
+
+
+def test_sharing_a_boundary_with_conservation_land_is_not_a_material_intersection():
+    """S-04 asks for a material intersection; touching is not one.
+
+    A parcel abutting a conservation area is the ordinary case in cadastral
+    data, and "intersects" is true of a shared edge, so the whole fringe of
+    every protected area used to be quarantined on zero overlap.
+    """
+    side = math.sqrt(50 * 10_000)
+    site = box(X, Y, X + side, Y + side)
+    abutting = gpd.GeoDataFrame(
+        {"name": ["reserve"]},
+        geometry=[box(X, Y + side, X + side, Y + side + 1000)], crs="EPSG:2193",
+    )
+    assert site.intersection(abutting.geometry.iloc[0]).area == 0.0
+    results, _ = evaluate_sites(_sites(site), abutting, NETWORK, NETWORK)
+    assert bool(results["S04_pass"].iloc[0])
+    assert results["status"].iloc[0] == "candidate_review"
+
+
+def test_a_real_overlap_with_conservation_land_still_quarantines():
+    side = math.sqrt(50 * 10_000)
+    site = box(X, Y, X + side, Y + side)
+    overlapping = gpd.GeoDataFrame(
+        {"name": ["reserve"]},
+        geometry=[box(X, Y + side - 50.0, X + side, Y + side + 1000)], crs="EPSG:2193",
+    )
+    results, _ = evaluate_sites(_sites(site), overlapping, NETWORK, NETWORK)
+    assert not bool(results["S04_pass"].iloc[0])
+    assert "S-04" in results["failed_rule_ids"].iloc[0]
+
+
+def test_water_distance_is_compared_before_it_is_rounded():
+    """4 cm from a lake rounds to 0.0 m and used to read as intersecting it."""
+    side = math.sqrt(50 * 10_000)
+    site = box(X, Y, X + side, Y + side)
+    water = gpd.GeoDataFrame(
+        {"name": ["pond"]},
+        geometry=[box(X + side + 0.04, Y, X + side + 500, Y + 500)], crs="EPSG:2193",
+    )
+    results, _ = evaluate_sites(_sites(site), EMPTY, NETWORK, NETWORK, water=water)
+    assert results["water_m"].iloc[0] == 0.0, "still rounded for publication"
+    assert bool(results["S09_pass"].iloc[0]), "but compared on the measurement"
+
+
+def test_water_that_really_touches_still_excludes():
+    side = math.sqrt(50 * 10_000)
+    site = box(X, Y, X + side, Y + side)
+    water = gpd.GeoDataFrame(
+        {"name": ["pond"]},
+        geometry=[box(X + side / 2, Y + side / 2, X + side, Y + side)], crs="EPSG:2193",
+    )
+    results, _ = evaluate_sites(_sites(site), EMPTY, NETWORK, NETWORK, water=water)
+    assert not bool(results["S09_pass"].iloc[0])
+
+
+def test_the_register_and_the_code_agree_on_what_s04_measures():
+    register = (ROOT / "rules" / "rule_register.csv").read_text(encoding="utf-8")
+    s04 = next(line for line in register.splitlines() if line.startswith("S-04,"))
+    assert "material intersection" in s04

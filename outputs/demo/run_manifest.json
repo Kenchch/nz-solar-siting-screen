@@ -16,6 +16,8 @@
   "coastal_review_flagged": 0,
   "grid_comparison": {
     "n": 4,
+    "grid_distance_unknown": 0,
+    "road_distance_unknown": 0,
     "overlap_count": 2,
     "non_overlap_count": 4,
     "jaccard": 0.333,

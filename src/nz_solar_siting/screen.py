@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 import json
 from pathlib import Path
 import sqlite3
@@ -17,10 +18,17 @@ from .siting import SitingConfig, evaluate_sites
 
 
 def _write_deterministic_gpkg(frame: gpd.GeoDataFrame, path: Path, layer: str) -> None:
-    """Write a fresh GeoPackage and remove creation-time-only differences."""
+    """Write a fresh GeoPackage and remove creation-time-only differences.
+
+    ``with sqlite3.connect(...)`` commits the transaction; it does not close the
+    connection. The open handle kept a lock on the file, so a caller that wrote
+    its outputs and then cleaned the directory up - which is what every run of
+    scripts/reproduce.py does on its second pass - failed on Windows with a
+    file-in-use error from code that had finished its work.
+    """
     path.unlink(missing_ok=True)
     frame.to_file(path, layer=layer, driver="GPKG")
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection:
         connection.execute(
             "UPDATE gpkg_contents SET last_change = '2000-01-01T00:00:00.000Z'"
         )

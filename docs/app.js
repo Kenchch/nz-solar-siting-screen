@@ -123,6 +123,10 @@ function renderAerial(study) {
     const a = cards.A, b = cards.B;
     text.textContent = `Sample A is the ${a.reviewed} largest disagreements: ${a.not_developable} are not developable land. Sample B is the next ${b.reviewed}, labelled only after the rules were frozen: ${b.not_developable} are. B is the milder sample by construction, and it is the one that tests whether the rules generalise.`;
   }
+  const reviewedHost = document.querySelector("#aerial-reviewed");
+  if (reviewedHost) {
+    reviewedHost.textContent = review.reviewed;
+  }
   const rulesHost = document.querySelector("#aerial-rules");
   if (rulesHost) {
     const b = cards.B;

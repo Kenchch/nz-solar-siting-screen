@@ -112,3 +112,78 @@ def test_variance_explained_is_always_qualified_as_rank_variance(path: str):
         if "14%" not in line and "14.3%" not in line:
             continue
         assert "rank" in line, f"{path}: variance not qualified as rank variance: {line[:120]}"
+
+
+def test_the_dashboard_reads_the_aerial_verdict_count_instead_of_asserting_one():
+    """Two samples are reviewed now; the page still said "all twenty".
+
+    The count moved when the held-out sample B was added, and a number typed
+    into prose cannot move with it. The sentence reads it from the study JSON,
+    which is where every other published figure on the page comes from.
+    """
+    study = json.loads(
+        (ROOT / "outputs" / "osm" / "osm_grid_study.json").read_text(encoding="utf-8")
+    )
+    review = study["aerial_review"]
+    assert review["reviewed"] == sum(
+        card["reviewed"] for card in review["by_sample"].values()
+    ), "the headline count and the per-sample counts describe the same review"
+    html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
+    javascript = (ROOT / "docs" / "app.js").read_text(encoding="utf-8")
+    assert 'id="aerial-reviewed"' in html
+    assert "reviewedHost.textContent = review.reviewed" in javascript
+    sentence = next(line for line in html.splitlines() if "aerial-reviewed" in line)
+    assert "twenty" not in sentence.lower(), sentence
+
+
+def test_the_dashboard_findings_are_numbered_once_each():
+    """A numbered sequence with two 02s is not a sequence."""
+    html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
+    indices = re.findall(r'class="finding-index">(\d+)<', html)
+    assert indices, "the findings carry visible numbers"
+    assert len(set(indices)) == len(indices), indices
+    assert indices == sorted(indices), indices
+
+
+def test_the_median_slope_in_prose_matches_the_study_it_describes():
+    """A number quoted in prose has to come from the run it describes.
+
+    This one did not: pooling DEM samples across tiles moved the median and the
+    sentence kept the pre-pooling figure, so the README and the study JSON
+    disagreed about the same statistic.
+    """
+    study = json.loads(
+        (ROOT / "outputs" / "osm" / "osm_grid_study.json").read_text(encoding="utf-8")
+    )
+    terrain = study["terrain_water"]
+    line = next(l for l in README.splitlines() if "Median mean slope across the study" in l)
+    assert f"{terrain['median_mean_slope_deg']:.2f}°" in line, line
+    assert str(terrain["excluded_by_either"]) in line, line
+
+
+def test_the_rule_table_and_the_register_agree_on_s04():
+    """Three surfaces state S-04; a shared boundary is not an overlap in any."""
+    register = (ROOT / "rules" / "rule_register.csv").read_text(encoding="utf-8")
+    assert "material intersection" in next(
+        line for line in register.splitlines() if line.startswith("S-04,")
+    )
+    row = next(l for l in README.splitlines() if l.startswith("| S-04 public conservation land"))
+    assert "material intersection" in row, row
+
+
+def test_the_price_status_line_is_derived_from_the_rows_it_describes():
+    """"2025 is partial" was typed, so it could not follow the next data drop."""
+    import pandas as pd
+
+    rates = pd.read_csv(ROOT / "outputs" / "demo" / "capture_rates.csv")
+    status = json.loads(
+        (ROOT / "outputs" / "demo" / "findings.json").read_text(encoding="utf-8")
+    )["price_status"]
+    complete = rates["complete_year"].astype(bool)
+    for row in rates.loc[~complete].itertuples():
+        assert (
+            f"{int(row.year)} is partial ({int(row.observations):,} / "
+            f"{int(row.expected_observations):,} periods)"
+        ) in status, status
+    for row in rates.loc[complete].itertuples():
+        assert f"{int(row.year)} is partial" not in status, status
