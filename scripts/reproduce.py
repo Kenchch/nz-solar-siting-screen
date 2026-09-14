@@ -130,7 +130,7 @@ def main() -> None:
     )
     candidates = gpd.read_file(output / "candidates.gpkg")
     plot_grid_comparison(candidates, figures / "grid_distance_comparison.png")
-    write_site_cards(candidates, powerlines, roads, cards, 3)
+    write_site_cards(candidates, powerlines, roads, cards, 3, geometry_label="DEMO geometry")
 
     price_path = ROOT / (args.prices or "data/derived/ISL0661_2019_2025.csv.gz")
     if not price_path.exists():
@@ -288,6 +288,15 @@ def main() -> None:
     tilt_sensitivity.to_csv(output / "tilt_sensitivity.csv", index=False)
     tilt_rows = tilt_sensitivity.to_dict(orient="records")
 
+    # Derived, not typed: "2025 is partial" is a fact about the file that was
+    # read, and a sentence written by hand cannot follow it to the next release.
+    partial = rates.loc[~rates["complete_year"]]
+    coverage = "; ".join(
+        f"{int(row.year)} is partial ({int(row.observations):,} / "
+        f"{int(row.expected_observations):,} periods)"
+        for row in partial.itertuples()
+    ) or "every market year in the file is complete"
+
     osm_study_path = ROOT / "outputs" / "osm" / "osm_grid_study.json"
     osm_study = (
         json.loads(osm_study_path.read_text(encoding="utf-8")) if osm_study_path.exists() else None
@@ -295,7 +304,7 @@ def main() -> None:
     payload = {
         **manifest,
         "osm_grid_study": osm_study,
-        "price_status": "official EA final prices, ISL0661; 2025 is partial (17,472 / 17,520 periods)",
+        "price_status": f"official EA final prices, {market['node']}; {coverage}",
         "capture_rates": rates.round(4).to_dict(orient="records"),
         "shape_exponent_sensitivity": sensitivity_rows,
         "tilt_sensitivity": tilt_rows,

@@ -16,6 +16,8 @@
   "coastal_review_flagged": 0,
   "grid_comparison": {
     "n": 4,
+    "grid_distance_unknown": 0,
+    "road_distance_unknown": 0,
     "overlap_count": 2,
     "non_overlap_count": 4,
     "jaccard": 0.333,
@@ -131,6 +133,8 @@
       "transmission_110kv_plus_m|road_m": [
         {
           "n": 10,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 0,
           "non_overlap_count": 20,
           "jaccard": 0.0,
@@ -139,6 +143,8 @@
         },
         {
           "n": 25,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 0,
           "non_overlap_count": 50,
           "jaccard": 0.0,
@@ -147,6 +153,8 @@
         },
         {
           "n": 50,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 0,
           "non_overlap_count": 100,
           "jaccard": 0.0,
@@ -155,6 +163,8 @@
         },
         {
           "n": 100,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 0,
           "non_overlap_count": 200,
           "jaccard": 0.0,
@@ -163,6 +173,8 @@
         },
         {
           "n": 250,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 29,
           "non_overlap_count": 442,
           "jaccard": 0.062,
@@ -171,6 +183,8 @@
         },
         {
           "n": 500,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 97,
           "non_overlap_count": 806,
           "jaccard": 0.107,
@@ -181,6 +195,8 @@
       "subtransmission_33_66kv_m|road_m": [
         {
           "n": 10,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 0,
           "non_overlap_count": 20,
           "jaccard": 0.0,
@@ -189,6 +205,8 @@
         },
         {
           "n": 25,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 0,
           "non_overlap_count": 50,
           "jaccard": 0.0,
@@ -197,6 +215,8 @@
         },
         {
           "n": 50,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 0,
           "non_overlap_count": 100,
           "jaccard": 0.0,
@@ -205,6 +225,8 @@
         },
         {
           "n": 100,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 15,
           "non_overlap_count": 170,
           "jaccard": 0.081,
@@ -213,6 +235,8 @@
         },
         {
           "n": 250,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 37,
           "non_overlap_count": 426,
           "jaccard": 0.08,
@@ -221,6 +245,8 @@
         },
         {
           "n": 500,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 151,
           "non_overlap_count": 698,
           "jaccard": 0.178,
@@ -231,6 +257,8 @@
       "distribution_22kv_m|road_m": [
         {
           "n": 10,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 2,
           "non_overlap_count": 16,
           "jaccard": 0.111,
@@ -239,6 +267,8 @@
         },
         {
           "n": 25,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 2,
           "non_overlap_count": 46,
           "jaccard": 0.042,
@@ -247,6 +277,8 @@
         },
         {
           "n": 50,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 2,
           "non_overlap_count": 96,
           "jaccard": 0.02,
@@ -255,6 +287,8 @@
         },
         {
           "n": 100,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 2,
           "non_overlap_count": 196,
           "jaccard": 0.01,
@@ -263,6 +297,8 @@
         },
         {
           "n": 250,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 33,
           "non_overlap_count": 434,
           "jaccard": 0.071,
@@ -271,6 +307,8 @@
         },
         {
           "n": 500,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 188,
           "non_overlap_count": 624,
           "jaccard": 0.232,
@@ -281,6 +319,8 @@
       "subtransmission_33_66kv_m|transmission_110kv_plus_m": [
         {
           "n": 10,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 1,
           "non_overlap_count": 18,
           "jaccard": 0.053,
@@ -289,6 +329,8 @@
         },
         {
           "n": 25,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 1,
           "non_overlap_count": 48,
           "jaccard": 0.02,
@@ -297,6 +339,8 @@
         },
         {
           "n": 50,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 2,
           "non_overlap_count": 96,
           "jaccard": 0.02,
@@ -305,6 +349,8 @@
         },
         {
           "n": 100,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 5,
           "non_overlap_count": 190,
           "jaccard": 0.026,
@@ -313,6 +359,8 @@
         },
         {
           "n": 250,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 43,
           "non_overlap_count": 414,
           "jaccard": 0.094,
@@ -321,6 +369,8 @@
         },
         {
           "n": 500,
+          "grid_distance_unknown": 0,
+          "road_distance_unknown": 0,
           "overlap_count": 148,
           "non_overlap_count": 704,
           "jaccard": 0.174,

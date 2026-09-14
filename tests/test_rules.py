@@ -46,3 +46,18 @@ def test_quarantined_rows_are_not_ranked_or_scored():
     assert results.loc[excluded, ["grid_rank", "road_rank", "solar_rank"]].isna().all().all()
     assert pd.isna(results.loc[excluded, "screen_score"]).all()
 
+
+
+def test_a_site_card_says_what_the_geometry_actually_is(tmp_path):
+    """Every card was stamped "DEMO geometry", including a real run's."""
+    from nz_solar_siting.site_cards import write_site_cards
+
+    sites, conservation, powerlines, roads = build_demo_layers()
+    results, _ = evaluate_sites(sites, conservation, powerlines, roads)
+    candidates = results[results.status.eq("candidate_review")]
+    demo = write_site_cards(candidates, powerlines, roads, tmp_path / "demo", 1)
+    real = write_site_cards(
+        candidates, powerlines, roads, tmp_path / "real", 1,
+        geometry_label="LINZ parcel",
+    )
+    assert demo[0].read_bytes() != real[0].read_bytes(), "the label reaches the card"

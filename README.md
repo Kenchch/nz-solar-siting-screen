@@ -259,7 +259,7 @@ The review said the screen was missing terrain and water, so the screen now has 
 | **S-09** mapped water | OSM `natural=water`/`wetland`, `landuse=basin` | exclude on any intersection | 106 excluded |
 | **S-10** coastal proximity | OSM `natural=coastline` | flag within 1,000 m | 133 flagged |
 
-Median mean slope across the study population is 0.77° — it is the Canterbury plains — and 206 sites (8.7%) fail S-08 or S-09. `scripts/compute_site_terrain.py` downloads the DEM tiles and writes a committed per-site slope table, so the screening run itself needs no raster and no network.
+Median mean slope across the study population is 0.78° — it is the Canterbury plains — and 206 sites (8.7%) fail S-08 or S-09. `scripts/compute_site_terrain.py` downloads the DEM tiles and writes a committed per-site slope table, so the screening run itself needs no raster and no network.
 
 GLO-30 is a **surface** model, not a terrain model: it includes shelterbelts, buildings and trees, which inflate slope locally on otherwise flat paddocks. S-08 therefore uses the mean over the polygon rather than the maximum, where a single row of poplars would dominate, and the rule is a terrain screen rather than a civil design input. A real design stage wants a bare-earth DEM.
 
@@ -384,19 +384,33 @@ was calling candidates was steep or wet.
 
 Cutting usable cover to parcel boundaries changes the population rather than
 filtering it. The same bounding box yields **10,684 candidate units**, and the
-screen returns **7,312 candidates against 3,372 quarantined**:
+screen returns **7,313 candidates against 3,371 quarantined**:
 
 | | Land-cover polygons | Parcel ∩ cover |
 |---|---:|---:|
 | Units assembled | 1,166 | 10,684 |
-| Candidates | 404 | 7,312 |
+| Candidates | 404 | 7,313 |
 | Median candidate area | 46.9 ha | **40.2 ha** |
 | Largest candidate | 2,524 ha | **625 ha** |
-| S-05 HPL flagged | 197 | 5,342 |
+| S-05 HPL flagged | 197 | 5,343 |
 
 The largest candidate is now *Lot 2 DP 361816* at 625 ha — an appellation and a
 title reference, which is what turns a polygon into something a reviewer can
 look up. Each unit carries its appellation, title and parcel intent.
+
+> **Open problem: S-04 is excluding on digitising slivers.** The rule register
+> says "no material intersection", and the screen now measures overlap area
+> rather than accepting a shared boundary as an overlap. On this population that
+> changes nothing — all 1,473 conservation hits have a positive overlap, because
+> LINZ Protected Areas and LINZ cadastral parcels are digitised independently and
+> do not share exact edges. What they do share is slivers: **1,103 of those 1,473
+> overlap by 1 m² or less**, and **771 units are quarantined by S-04 alone on a
+> sub-square-metre overlap** — 23% of everything in quarantine. A 20 ha rule
+> excluding a site over 1 m² of a neighbouring layer is not measuring
+> conservation status, it is measuring digitising noise. Deciding what "material"
+> should mean is a threshold choice, and picking one against the population that
+> exposed it is how the in-sample problem started, so it is reported here and
+> left for its own change rather than tuned in place.
 
 Two limitations have to be stated with it:
 
@@ -469,7 +483,7 @@ actual Canterbury land than against twelve rectangles.
 | S-01 contiguous area | Exclude | at least 20 ha |
 | S-02 usable width | Exclude | 180 m inward-buffer core; retain `2A/P` as comparator |
 | S-03 land cover | Exclude | configured LCDB whitelist |
-| S-04 public conservation land | Exclude | no intersection |
+| S-04 public conservation land | Exclude | no material intersection: a shared boundary is not an overlap. **Open: "material" is currently any positive overlap, and 771 cadastral units are excluded on 1 m² or less** |
 | S-05 highly productive land | **Flag** | LUC 1–3 → consenting review; never automatic exclusion |
 | S-06 grid proximity | **Flag + published distances** | both distances, both ranks and rank shift retained; **excluded from `screen_score`** |
 | S-07 solar resource | Rank | higher LENZ mean annual solar radiation ranks better |
@@ -477,7 +491,7 @@ actual Canterbury land than against twelve rectangles.
 | S-09 mapped water | Exclude | any intersection with mapped standing water or wetland |
 | S-10 coastal proximity | **Flag** | within 1,000 m of the open coast → hazard review |
 
-Excluded records are written to `quarantine.gpkg` with the rule IDs that removed them. Selection rate is reported as an outcome, not treated as evidence of corruption. Publication instead fails on wrong CRS, empty or invalid geometry, duplicate site IDs, missing required fields, non-finite solar values, duplicate or unmatched market periods, non-finite prices and failed row reconciliation.
+Excluded records are written to `quarantine.gpkg` with the rule IDs that removed them. Selection rate is reported as an outcome, not treated as evidence of corruption. Publication instead fails on wrong CRS, empty or invalid geometry, duplicate site IDs, a non-unique index, multipart sites, missing required fields, non-finite solar values, duplicate or unmatched market periods, non-finite prices and failed row reconciliation.
 
 Not covered: connection-point hosting capacity, voltage, connection cost, land ownership, parcel negotiation, geotechnical conditions, flood and wildfire risk, glare, ecology beyond the public-conservation overlay, archaeology, landscape/visual effects, mana whenua values, local plan rules, network losses, curtailment or construction access.
 

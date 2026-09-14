@@ -85,6 +85,14 @@ def nearest_distance_m(sites: gpd.GeoDataFrame, network: gpd.GeoDataFrame) -> pd
     An empty network yields NaN, not infinity. The absence of a mapped line is
     an unknown distance, and treating unknown as "infinitely far" would rank a
     site last on the strength of missing data instead of flagging it for review.
+
+    Rows are matched back by position, not by index label. The join emits one
+    row per nearest neighbour and has to be collapsed per site; collapsing on
+    the index label silently merges sites that happen to share one, and every
+    site in that group then reports the nearest distance any of them had. A
+    duplicated index is not exotic - ``GeoDataFrame.explode(index_parts=False)``,
+    the very call the screen tells a caller to make on multipart input, leaves
+    one behind.
     """
     assert_nztm(sites, "sites")
     assert_nztm(network, "network")
@@ -92,10 +100,12 @@ def nearest_distance_m(sites: gpd.GeoDataFrame, network: gpd.GeoDataFrame) -> pd
         return pd.Series(index=sites.index, dtype=float)
     if network.empty:
         return pd.Series(np.nan, index=sites.index, dtype=float)
+    positional = sites[["geometry"]].reset_index(drop=True)
     joined = gpd.sjoin_nearest(
-        sites[["geometry"]], network[["geometry"]], how="left", distance_col="_distance_m"
+        positional, network[["geometry"]], how="left", distance_col="_distance_m"
     )
-    return joined.groupby(level=0)["_distance_m"].min().reindex(sites.index).astype(float)
+    distances = joined.groupby(level=0)["_distance_m"].min().reindex(range(len(positional)))
+    return pd.Series(distances.to_numpy(dtype=float), index=sites.index)
 
 
 def add_grid_proxies(
@@ -166,15 +176,31 @@ def verify_grid_flag(frame: pd.DataFrame, config) -> pd.Series:
 
 
 def compare_top_n(frame: pd.DataFrame, n: int = 10) -> dict[str, object]:
+    """Overlap between the nearest-N shortlists the two proxies produce.
+
+    A site whose distance could not be measured is not a site that is far away;
+    it is a site with no distance, and it cannot be in a nearest-N shortlist.
+    ``nsmallest`` keeps NaN rows and orders them last rather than dropping them,
+    so an unmeasured site used to fill a shortlist slot - and a run whose
+    powerline layer mapped nothing at all published ``jaccard: 1.0``, "the road
+    proxy reproduces the grid shortlist exactly", on no measurement at all.
+    Unmeasured rows are kept out of both shortlists and counted instead, and an
+    empty union reports ``None`` rather than perfect agreement.
+    """
+    grid_known = pd.to_numeric(frame["grid_line_m"], errors="coerce").notna()
+    road_known = pd.to_numeric(frame["road_proxy_m"], errors="coerce").notna()
     n = min(n, len(frame))
-    grid = set(frame.nsmallest(n, "grid_line_m")["site_id"].astype(str))
-    road = set(frame.nsmallest(n, "road_proxy_m")["site_id"].astype(str))
+    grid = set(frame.loc[grid_known].nsmallest(n, "grid_line_m")["site_id"].astype(str))
+    road = set(frame.loc[road_known].nsmallest(n, "road_proxy_m")["site_id"].astype(str))
     overlap = grid & road
+    union = grid | road
     return {
         "n": n,
+        "grid_distance_unknown": int((~grid_known).sum()),
+        "road_distance_unknown": int((~road_known).sum()),
         "overlap_count": len(overlap),
-        "non_overlap_count": len(grid | road) - len(overlap),
-        "jaccard": round(len(overlap) / len(grid | road), 3) if grid or road else 1.0,
+        "non_overlap_count": len(union) - len(overlap),
+        "jaccard": round(len(overlap) / len(union), 3) if union else None,
         "grid_only": sorted(grid - road),
         "road_only": sorted(road - grid),
     }

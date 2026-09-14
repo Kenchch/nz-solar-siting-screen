@@ -15,7 +15,15 @@ def write_site_cards(
     roads: gpd.GeoDataFrame,
     output_dir: str | Path,
     count: int = 3,
+    geometry_label: str = "DEMO geometry",
 ) -> list[Path]:
+    """Draw one card per top-ranked site.
+
+    ``geometry_label`` names what the polygons are and is printed on every card.
+    It used to be the literal string "DEMO geometry", which is true of the demo
+    run and false of any other: a card built from real parcels would have gone
+    out stamped as a demonstration, and a caller had no way to say otherwise.
+    """
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     for stale in output.glob("*_card.png"):
@@ -29,7 +37,7 @@ def write_site_cards(
         powerlines.plot(ax=ax, color="#19a974", linewidth=2, label="Public powerline data")
         roads.plot(ax=ax, color="#6d7f8b", linewidth=1, alpha=.8, label="Road proxy")
         minx, miny, maxx, maxy = row.geometry.buffer(1800).bounds
-        ax.set(xlim=(minx, maxx), ylim=(miny, maxy), title=f"{row.site_id} — DEMO geometry")
+        ax.set(xlim=(minx, maxx), ylim=(miny, maxy), title=f"{row.site_id} — {geometry_label}")
         ax.legend(loc="lower left", fontsize=8)
         ax.set_axis_off()
         info.axis("off")

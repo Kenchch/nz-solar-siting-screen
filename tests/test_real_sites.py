@@ -230,3 +230,27 @@ def test_service_errors_explain_the_status_and_never_echo_the_url():
     assert "accept the licence" in message
     assert "layer-104400" in message
     assert "SECRET" not in message
+
+
+def test_the_assembled_layer_has_a_usable_index():
+    """The screen refuses a non-unique index, so the assembly must not ship one.
+
+    Distances are joined per row and then collapsed per site, so two rows
+    sharing an index label would be given each other's distances. ``explode``
+    leaves exactly such an index behind, and the sort onto the geometry's own
+    south-west corner then permutes whatever survives. ``build_sites`` resets
+    after both; nothing else in this file notices if it stops.
+
+    The input is fed in reverse so the sort has to reorder it - on an input that
+    is already sorted, the index comes out as 0..n-1 whether it was reset or
+    not, and the assertion passes without testing anything.
+    """
+    landcover = _landcover().iloc[::-1].reset_index(drop=True)
+    assembled = build.build_sites(
+        landcover, _luc(), _solar(),
+        tuple(CONFIG["siting"]["usable_lcdb_classes"]),
+        float(CONFIG["siting"]["minimum_area_ha"]), REAL,
+    )
+    assert len(assembled) > 1, "a one-row frame cannot show a permuted index"
+    assert assembled.index.is_unique
+    assert list(assembled.index) == list(range(len(assembled)))

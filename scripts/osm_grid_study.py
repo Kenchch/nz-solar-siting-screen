@@ -190,8 +190,6 @@ def main() -> None:
     arguments = parser.parse_args()
 
     project_config = load_project_config(ROOT / "config" / "assumptions.yml")
-    assumptions = project_config.assumptions
-    study_config = assumptions["osm_study"]
     config = project_config.siting
     # S-06 and the voltage tiers come from the library, so the study cannot
     # drift away from what the screen itself does.
@@ -251,13 +249,18 @@ def main() -> None:
         raise RuntimeError(
             "site_terrain.csv does not cover every site; rerun scripts/compute_site_terrain.py"
         )
-    sites["water_m"] = nearest_distance_m(sites, wetland).round(1)
-    sites["coastline_m"] = nearest_distance_m(sites, coastline).round(1)
+    # Round for publication, test on the measurement, exactly as the screen
+    # does: a site 4 cm from a mapped lake publishes 0.0 m and is not a site
+    # that intersects water.
+    water_m = nearest_distance_m(sites, wetland)
+    coastline_m = nearest_distance_m(sites, coastline)
+    sites["water_m"] = water_m.round(1)
+    sites["coastline_m"] = coastline_m.round(1)
     maximum_slope = config.maximum_mean_slope_deg
     coastal_review = config.coastal_review_distance_m
     sites["S08_slope_pass"] = ~(sites["mean_slope_deg"] > maximum_slope)
-    sites["S09_water_pass"] = ~(sites["water_m"] <= 0.0)
-    sites["S10_coastal_flag"] = sites["coastline_m"] < coastal_review
+    sites["S09_water_pass"] = ~(water_m <= 0.0)
+    sites["S10_coastal_flag"] = coastline_m < coastal_review
     sites["terrain_water_pass"] = sites["S08_slope_pass"] & sites["S09_water_pass"]
 
     sweeps: dict[str, pd.DataFrame] = {}
@@ -338,7 +341,10 @@ def main() -> None:
     # be in-sample. B is the next N by the same measure, labelled from imagery
     # after the thresholds were frozen, and is the held-out check.
     drawn = sites.nlargest(arguments.aerial_sample * 2, shift).copy()
-    drawn["sample"] = ["A"] * arguments.aerial_sample + ["B"] * (len(drawn) - arguments.aerial_sample)
+    # A run with fewer sites than the two samples ask for still has to label
+    # every row it drew, and only the rows it drew.
+    first = min(arguments.aerial_sample, len(drawn))
+    drawn["sample"] = ["A"] * first + ["B"] * (len(drawn) - first)
     sample = drawn
     centroids = sample.geometry.centroid.to_crs("EPSG:4326")
     sample["latitude"] = centroids.y.round(6)
