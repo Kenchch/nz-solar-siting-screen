@@ -180,3 +180,33 @@ def test_the_register_and_the_code_agree_on_what_s04_measures():
     assert "3561" in s04, "the association table is the primary test"
     assert "s04_basis" in s04, "every unit records which path decided it"
     assert "conservation_overlay_m" in s04, "the fallback names its accuracy band"
+
+
+def test_a_terrain_table_with_two_rows_for_one_site_is_refused():
+    """Keeping the first row made an exclusion depend on file order."""
+    side = math.sqrt(50 * 10_000)
+    sites = _sites(box(X, Y, X + side, Y + side))
+    terrain = pd.DataFrame({
+        "site_id": ["A", "A"],
+        "mean_slope_deg": [2.0, 30.0],      # one passes S-08, the other does not
+    })
+    with pytest.raises(ValueError, match="sharing a site_id"):
+        evaluate_sites(sites, EMPTY, NETWORK, NETWORK, terrain=terrain)
+
+
+def test_the_refusal_does_not_depend_on_which_row_came_first():
+    side = math.sqrt(50 * 10_000)
+    sites = _sites(box(X, Y, X + side, Y + side))
+    for order in ([2.0, 30.0], [30.0, 2.0]):
+        terrain = pd.DataFrame({"site_id": ["A", "A"], "mean_slope_deg": order})
+        with pytest.raises(ValueError, match="sharing a site_id"):
+            evaluate_sites(sites, EMPTY, NETWORK, NETWORK, terrain=terrain)
+
+
+def test_a_clean_terrain_table_still_joins():
+    side = math.sqrt(50 * 10_000)
+    sites = _sites(box(X, Y, X + side, Y + side))
+    terrain = pd.DataFrame({"site_id": ["A", "B"], "mean_slope_deg": [30.0, 1.0]})
+    results, _ = evaluate_sites(sites, EMPTY, NETWORK, NETWORK, terrain=terrain)
+    assert results["mean_slope_deg"].iloc[0] == 30.0
+    assert not bool(results["S08_pass"].iloc[0])

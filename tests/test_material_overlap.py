@@ -116,7 +116,8 @@ def test_the_reconciliation_between_identity_and_geometry_is_published():
     reconciliation = results.attrs["s04_reconciliation"]
     assert reconciliation["identity_available"] is True
     assert reconciliation["identity_only"] == 1, "identity excluded it, geometry did not"
-    assert reconciliation["geometry_only"] == 0
+    assert reconciliation["geometry_only_excluded_by_fallback"] == 0
+    assert reconciliation["geometry_only_cleared_by_association"] == 0
 
 
 def test_without_the_table_s04_is_geometry_and_says_so():
@@ -168,3 +169,65 @@ def test_the_accuracy_bands_are_configurable_and_not_baked_in():
     results, _ = evaluate_sites(_sites(hpl_fraction=[0.01]), EMPTY, NETWORK, NETWORK, generous)
     assert results["luc_noise_band"].iloc[0] == 0.0
     assert bool(results["S05_hpl_flag"].iloc[0]), "with no band, any coverage flags"
+
+
+def test_the_reconciliation_separates_a_disagreement_that_excludes_from_one_that_does_not():
+    """"geometry only" was two different outcomes added together.
+
+    A unit geometry flags and identity does not is either excluded - because the
+    protected area has no association row and the fallback ran - or left alone,
+    because the table covers that area and says this parcel is not part of it.
+    Only the first changes the exclusion total, so the two are counted apart and
+    the total is arithmetic the reader can check.
+    """
+    overlapping = box(X, Y, X + SIDE, Y + 200)
+    sites = _sites(parcel_id=[222])
+    association = pd.DataFrame({"napalis_id": [4_242], "parcel_id": [111]})
+
+    # The area is in the table, so geometry flags it but the fallback does not run.
+    covered, _ = evaluate_sites(
+        sites, _protected(overlapping, 4_242), NETWORK, NETWORK,
+        conservation_parcels=association,
+    )
+    assert covered.attrs["s04_reconciliation"]["geometry_only_cleared_by_association"] == 1
+    assert covered.attrs["s04_reconciliation"]["geometry_only_excluded_by_fallback"] == 0
+    assert covered.attrs["s04_reconciliation"]["excluded_total"] == 0
+    assert bool(covered["S04_pass"].iloc[0])
+
+    # The same geometry, on an area the table does not cover: the fallback runs.
+    uncovered, _ = evaluate_sites(
+        sites, _protected(overlapping, 9_999_999), NETWORK, NETWORK,
+        conservation_parcels=association,
+    )
+    assert uncovered.attrs["s04_reconciliation"]["geometry_only_excluded_by_fallback"] == 1
+    assert uncovered.attrs["s04_reconciliation"]["geometry_only_cleared_by_association"] == 0
+    assert uncovered.attrs["s04_reconciliation"]["excluded_total"] == 1
+    assert not bool(uncovered["S04_pass"].iloc[0])
+
+
+def test_the_exclusion_total_is_identity_plus_fallback_only():
+    """The number in the README has to be derivable from the table beside it."""
+    sites = gpd.GeoDataFrame(
+        {"site_id": ["in-table", "next-door"],
+         "lcdb_class": ["Short-rotation Cropland"] * 2,
+         "luc_class": [3, 3], "solar_kwh_m2": [1400.0, 1400.0],
+         "parcel_id": [111, 222]},
+        geometry=[box(X, Y, X + SIDE, Y + SIDE),
+                  box(X + 5_000, Y, X + 5_000 + SIDE, Y + SIDE)],
+        crs="EPSG:2193",
+    )
+    conservation = gpd.GeoDataFrame(
+        {"napalis_id": [4_242, 9_999_999]},
+        geometry=[box(X + 80_000, Y + 80_000, X + 81_000, Y + 81_000),
+                  box(X + 5_000, Y, X + 5_000 + SIDE, Y + 200)],
+        crs="EPSG:2193",
+    )
+    association = pd.DataFrame({"napalis_id": [4_242], "parcel_id": [111]})
+    results, _ = evaluate_sites(
+        sites, conservation, NETWORK, NETWORK, conservation_parcels=association
+    )
+    reconciliation = results.attrs["s04_reconciliation"]
+    identity = reconciliation["agree_excluded"] + reconciliation["identity_only"]
+    fallback_only = reconciliation["geometry_only_excluded_by_fallback"]
+    assert identity + fallback_only == reconciliation["excluded_total"]
+    assert reconciliation["excluded_total"] == int((~results["S04_pass"]).sum()) == 2
