@@ -19,6 +19,7 @@ from shapely.ops import unary_union
 
 from .geometry import (
     area_hectares,
+    geometry_sha256,
     has_width_core,
     mean_width_area_perimeter,
     overlap_noise_band_m2,
@@ -307,10 +308,27 @@ def evaluate_sites(
         out["hpl_fraction"] = hpl_fraction.round(4)
         out["S05_hpl_flag"] = hpl_fraction > luc_band
         out["s05_basis"] = "coverage_fraction"
+        # A fraction is a share of the whole unit, so land the LUC layer does
+        # not reach lowers it. That is the right arithmetic and the wrong thing
+        # to read silently: "not highly productive land" and "not mapped" are
+        # different answers. The gap only means something once it is bigger
+        # than the band the same registration error already buys, so the flag
+        # uses the unit's own band rather than a second threshold.
+        if "luc_mapped_fraction" in sites.columns:
+            mapped = pd.to_numeric(sites["luc_mapped_fraction"], errors="coerce")
+            out["luc_mapped_fraction"] = mapped.round(4)
+            out["S05_verify_luc"] = (1.0 - mapped > luc_band) | mapped.isna()
+        else:
+            out["luc_mapped_fraction"] = np.nan
+            out["S05_verify_luc"] = True
     else:
         out["hpl_fraction"] = np.nan
+        out["luc_mapped_fraction"] = np.nan
         out["S05_hpl_flag"] = out["luc_class"].isin([1, 2, 3])
         out["s05_basis"] = "dominant_class"
+        # The dominant class is one number for the whole unit, so there is no
+        # coverage to be incomplete; s05_basis already says which rule ran.
+        out["S05_verify_luc"] = False
     out = add_grid_proxies(out, powerlines, roads, cfg)
 
     # S-08 slope. The value is precomputed into a per-site table, so a missing
@@ -339,10 +357,39 @@ def evaluate_sites(
                 "mean_slope_deg is present on sites and a terrain table was also given; "
                 "pass one or the other so it is unambiguous which slope was screened"
             )
+        # A table keyed on site_id says nothing about whether the geometry
+        # behind that id is still the geometry the slope was averaged over. If
+        # it carries a digest, check it: a reissued parcel can keep its id and
+        # move its boundary, and a slope computed over the old outline would
+        # otherwise be screened against the new one.
+        if "geometry_sha256" in terrain.columns:
+            expected = out.geometry.map(geometry_sha256)
+            recorded = out["site_id"].map(terrain.set_index("site_id")["geometry_sha256"])
+            mismatched = recorded.notna() & (recorded.astype(str) != expected)
+            if mismatched.any():
+                example = out.loc[mismatched, "site_id"].iloc[0]
+                raise ValueError(
+                    f"terrain was computed over different geometry for "
+                    f"{int(mismatched.sum())} sites, first {example!r}. The slope in the "
+                    "table does not describe the polygon being screened; rerun "
+                    "scripts/compute_site_terrain.py against these sites."
+                )
         slope = pd.to_numeric(
             out["site_id"].map(terrain.set_index("site_id")["mean_slope_deg"]),
             errors="coerce",
         )
+        # Slope is the magnitude of a gradient in degrees, so it lives in
+        # [0, 90]. Anything else is a corrupt table - a radian value, a
+        # percentage, a sentinel - and silently comparing it against a 10 degree
+        # threshold would quarantine or pass sites on a unit the screen never
+        # agreed to. NaN stays allowed: it means unknown, which S-08 flags.
+        impossible = slope.notna() & (~np.isfinite(slope) | (slope < 0.0) | (slope > 90.0))
+        if impossible.any():
+            offending = slope[impossible].iloc[0]
+            raise ValueError(
+                f"terrain has {int(impossible.sum())} mean_slope_deg values outside "
+                f"0-90 degrees, first {offending!r}; a slope in degrees cannot be that"
+            )
     elif supplied_column:
         # A caller who has already joined slope on must not have it silently
         # overwritten with NaN and then read S-08 as inapplicable.
@@ -416,6 +463,7 @@ def evaluate_sites(
         "site_id", "status", "failed_rule_ids", "rules_not_applied",
         "width_2ap_m", "width_core_pass", "width_methods_disagree",
         "S05_hpl_flag", "s05_basis", "hpl_fraction", "luc_noise_band",
+        "luc_mapped_fraction", "S05_verify_luc",
         "s04_basis", "conservation_overlap_m2", "conservation_noise_band_m2",
         "S06_verify_grid", "S08_verify_slope", "S10_coastal_flag",
     ]].copy()

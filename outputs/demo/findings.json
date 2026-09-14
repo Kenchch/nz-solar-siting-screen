@@ -14,6 +14,7 @@
   ],
   "slope_unknown": 12,
   "hpl_flagged": 6,
+  "luc_coverage_unverified": 0,
   "s05_basis": [
     "dominant_class"
   ],

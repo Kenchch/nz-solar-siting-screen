@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
+
+import shapely
 from shapely.geometry.base import BaseGeometry
 
 
@@ -48,3 +51,31 @@ def overlap_noise_band_m2(geometry: BaseGeometry, accuracy_m: float) -> float:
     if geometry is None or geometry.is_empty or accuracy_m < 0:
         return math.nan
     return float(accuracy_m * geometry.length)
+
+
+def geometry_sha256(geometry: BaseGeometry, precision_m: float = 0.01) -> str:
+    """A digest of a polygon's shape, for checking that two tables mean it.
+
+    A derived table keyed on ``site_id`` says nothing about whether the geometry
+    behind that id is still the geometry it was computed from. Re-running the
+    assembly against a reissued parcel keeps the id stable where the boundary
+    moved less than the identifier's own hash resolution, and a slope averaged
+    over the old outline would then be attached to the new one without anything
+    noticing. The digest travels with the derived value so the join can be
+    checked rather than assumed.
+
+    Coordinates are rounded to ``precision_m`` in the text form before hashing,
+    so re-reading the same polygon through a different driver does not change
+    the digest over floating-point noise. Rounding the text cannot alter the
+    topology on the way, which a precision model can.
+
+    This is deliberately not the short hash inside a ``site_id``: that one is an
+    identifier and wants to stay readable, this one is an integrity check and
+    wants the full digest.
+    """
+    if geometry is None or geometry.is_empty:
+        return ""
+    decimals = max(0, round(-math.log10(precision_m))) if precision_m > 0 else 0
+    return hashlib.sha256(
+        shapely.to_wkt(geometry, rounding_precision=decimals, trim=True).encode("utf-8")
+    ).hexdigest()
