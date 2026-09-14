@@ -12,6 +12,7 @@ import importlib.util
 from pathlib import Path
 
 import geopandas as gpd
+import pandas as pd
 import pytest
 import yaml
 from shapely.geometry import MultiPolygon, Polygon, box
@@ -157,9 +158,12 @@ def test_the_assembled_layer_satisfies_the_screen_contract(assembled):
     from nz_solar_siting.load import assert_nztm
     from nz_solar_siting.siting import evaluate_sites
 
-    assert set(assembled.columns) == {
-        "site_id", "lcdb_class", "luc_class", "solar_kwh_m2", "geometry"
-    }
+    assert {"site_id", "lcdb_class", "luc_class", "solar_kwh_m2", "geometry"} <= set(
+        assembled.columns
+    )
+    # S-05 is a coverage rule now, so the overlay result travels with the layer.
+    assert {"hpl_fraction", "luc_mapped_fraction"} <= set(assembled.columns)
+    assert assembled["hpl_fraction"].between(0.0, 1.0).all()
     assert_nztm(assembled, "sites")
     empty = gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs="EPSG:2193")
     network = gpd.GeoDataFrame(
@@ -254,3 +258,62 @@ def test_the_assembled_layer_has_a_usable_index():
     assert len(assembled) > 1, "a one-row frame cannot show a permuted index"
     assert assembled.index.is_unique
     assert list(assembled.index) == list(range(len(assembled)))
+
+
+def test_identifiers_describe_the_unit_rather_than_its_position_in_the_queue():
+    """A sequential number renumbered every unit when one parcel was inserted.
+
+    The id is the parcel, the cover class and a hash of the geometry, so a unit
+    keeps its identity across a re-download and anything keyed on it - a terrain
+    table, an aerial verdict - survives.
+    """
+    parcels = gpd.GeoDataFrame(
+        {"id": [7666945], "appellation": ["Lot 1 DP 1"], "parcel_intent": ["Fee Simple Title"],
+         "titles": ["CB1/1"], "calc_area": [810000]},
+        geometry=[box(X - 100, Y - 100, X + 1000, Y + 1000)], crs="EPSG:2193",
+    )
+    built = build.build_sites(
+        _landcover(), _luc(), _solar(),
+        tuple(CONFIG["siting"]["usable_lcdb_classes"]),
+        float(CONFIG["siting"]["minimum_area_ha"]), REAL, parcels=parcels,
+    )
+    assert len(built) == 1
+    site_id = built["site_id"].iloc[0]
+    assert site_id.startswith("PARCEL-7666945-HPEG-"), site_id
+    assert built["parcel_id"].iloc[0] == 7666945, "S-04 joins on this"
+
+    # An unrelated parcel inserted ahead of it must not rename it.
+    extra = gpd.GeoDataFrame(
+        {"id": [1], "appellation": ["Lot 9 DP 9"], "parcel_intent": ["Fee Simple Title"],
+         "titles": ["CB9/9"], "calc_area": [810000]},
+        geometry=[box(X - 9000, Y - 9000, X - 8000, Y - 8000)], crs="EPSG:2193",
+    )
+    with_extra = build.build_sites(
+        _landcover(), _luc(), _solar(),
+        tuple(CONFIG["siting"]["usable_lcdb_classes"]),
+        float(CONFIG["siting"]["minimum_area_ha"]), REAL,
+        parcels=pd.concat([extra, parcels], ignore_index=True),
+    )
+    assert site_id in set(with_extra["site_id"])
+
+
+def test_luc_comes_from_coverage_not_from_the_middle_of_the_unit():
+    """A parcel that is mostly LUC 2 with a LUC 6 hollow used to answer 6."""
+    unit = box(X, Y, X + 900, Y + 900)
+    landcover = gpd.GeoDataFrame(
+        {"Name_2018": ["High Producing Exotic Grassland"]}, geometry=[unit], crs="EPSG:2193"
+    )
+    # LUC 2 everywhere except a hollow over the representative point.
+    hollow = box(X + 400, Y + 400, X + 500, Y + 500)
+    luc = gpd.GeoDataFrame(
+        {"lucl": [6, 2]},
+        geometry=[hollow, unit.difference(hollow)], crs="EPSG:2193",
+    )
+    built = build.build_sites(
+        landcover, luc, _solar(),
+        tuple(CONFIG["siting"]["usable_lcdb_classes"]),
+        float(CONFIG["siting"]["minimum_area_ha"]), REAL,
+    )
+    assert built["luc_class"].iloc[0] == 2, "the dominant class by area"
+    assert built["hpl_fraction"].iloc[0] > 0.95
+    assert built["luc_mapped_fraction"].iloc[0] == pytest.approx(1.0, abs=1e-3)

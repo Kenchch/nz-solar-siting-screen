@@ -30,6 +30,7 @@ verification run and check the printed layer titles and feature counts.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -44,6 +45,7 @@ sys.path.insert(0, str(ROOT / "src"))
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import shapely
 
 from nz_solar_siting.config import load_project_config
 from nz_solar_siting.load import assert_nztm
@@ -169,6 +171,47 @@ def fetch_layer(
     return gpd.GeoDataFrame(combined, geometry="geometry", crs="EPSG:2193")
 
 
+def fetch_protected_area_parcels(
+    service: str, key: str, table_id: int, napalis_ids: list[int], timeout: int,
+    chunk: int = 200,
+) -> pd.DataFrame:
+    """The parcels each protected area is made of, from LINZ table 3561.
+
+    This is the layer that makes S-04 an identity test. LINZ says of Protected
+    Areas that "the boundaries for most protected areas are derived from the
+    Landonline Primary Parcel(s)", so asking the question with geometry measures
+    the residual between two renderings of the same boundary. The association is
+    published, so it is read rather than inferred.
+
+    The table has no geometry and so no bounding box to filter on; it is
+    requested by the napalis ids actually present in the study area, in chunks,
+    because the whole table is national.
+    """
+    rows: list[dict[str, int]] = []
+    for start in range(0, len(napalis_ids), chunk):
+        batch = napalis_ids[start:start + chunk]
+        query = urlencode({
+            "service": "WFS", "version": "2.0.0", "request": "GetFeature",
+            "typeNames": f"table-{table_id}", "outputFormat": "application/json",
+            "count": PAGE_SIZE,
+            "cql_filter": "napalis_id IN (" + ",".join(str(i) for i in batch) + ")",
+        })
+        payload = json.loads(
+            _request(f"{service};key={key}/wfs?{query}", timeout, f"table-{table_id}")
+        )
+        rows.extend(feature["properties"] for feature in payload.get("features") or [])
+    frame = pd.DataFrame(rows)
+    if frame.empty:
+        return pd.DataFrame(columns=["napalis_id", "parcel_id"])
+    return (
+        frame[["napalis_id", "parcel_id"]]
+        .astype("int64")
+        .drop_duplicates()
+        .sort_values(["napalis_id", "parcel_id"])
+        .reset_index(drop=True)
+    )
+
+
 class MissingRasterExport(RuntimeError):
     """Raised when a raster-only layer has not been exported yet."""
 
@@ -215,6 +258,91 @@ def sample_raster(sites: gpd.GeoDataFrame, path: Path, spec: dict, label: str) -
             selected = patch[mask & ~patch.mask]
             values.append(float(selected.mean()) if selected.size else float("nan"))
     return pd.Series(values, index=sites.index, dtype=float) * scale * per_year
+
+
+def class_code(label: object) -> str:
+    """Initials of a land-cover class, for a readable identifier."""
+    words = [word for word in str(label).replace("-", " ").replace(",", " ").split() if word]
+    return "".join(word[0] for word in words).upper() or "X"
+
+
+def geometry_fingerprint(geometry, precision_m: float = 0.01, length: int = 8) -> str:
+    """A stable short hash of a polygon, to 1 cm.
+
+    Coordinates are rounded before hashing so that re-downloading the same
+    parcel does not produce a different identifier over floating-point noise.
+    Rounding happens in the text form rather than through a precision model,
+    which cannot alter the topology of the polygon on the way.
+    """
+    return hashlib.sha1(
+        shapely.to_wkt(geometry, rounding_precision=2, trim=True).encode("utf-8")
+    ).hexdigest()[:length]
+
+
+def site_identifiers(sites: gpd.GeoDataFrame) -> list[str]:
+    """Identify a unit by what it is, not by where it landed in the queue.
+
+    A unit is one parcel intersected with one cover class, so the parcel id and
+    the class name identify it and the geometry hash separates the pieces when
+    that intersection is not connected. Nothing here depends on the order the
+    service paged features back or on how many units the run happened to
+    produce, which a sequential number does: inserting one parcel used to
+    renumber every unit after it, so no identifier survived a re-download and
+    nothing keyed on one - a terrain table, an aerial verdict - could be reused.
+    """
+    if "id" not in sites.columns:
+        raise KeyError(
+            "parcels must carry their LINZ id: it is what S-04 joins on and what "
+            "makes a site_id reproducible. Check real_data.layers.parcels.keep_fields."
+        )
+    return [
+        f"PARCEL-{int(parcel_id)}-{class_code(cover)}-{geometry_fingerprint(geometry)}"
+        for parcel_id, cover, geometry in zip(
+            sites["id"], sites["lcdb_class"], sites.geometry
+        )
+    ]
+
+
+def luc_coverage(
+    sites: gpd.GeoDataFrame, luc: gpd.GeoDataFrame, luc_column: str
+) -> pd.DataFrame:
+    """Area-weighted LUC class per unit, and the LUC 1-3 share of it.
+
+    A representative point asks "what class is the middle of this unit", which
+    is the wrong question for a rule about how much of a unit is highly
+    productive land: a parcel that is 90% LUC 2 with a LUC 6 hollow in the
+    middle answered 6. The overlay answers the coverage question, returns the
+    class with the most area as the published ``luc_class``, and the LUC 1-3
+    share as ``hpl_fraction``.
+
+    The share is a fraction of the unit, so land the LUC layer does not cover at
+    all reduces it rather than being silently redistributed.
+    """
+    pieces = gpd.overlay(
+        sites[["site_id", "geometry"]],
+        luc[[luc_column, "geometry"]].rename(columns={luc_column: "luc_class"}),
+        how="intersection", keep_geom_type=True,
+    )
+    pieces["luc_class"] = pd.to_numeric(pieces["luc_class"], errors="coerce")
+    pieces["piece_m2"] = pieces.geometry.area
+    unit_area = pd.Series(sites.geometry.area.to_numpy(), index=sites["site_id"])
+    by_class = pieces.groupby(["site_id", "luc_class"], dropna=True)["piece_m2"].sum()
+    dominant = by_class.reset_index().sort_values(
+        ["site_id", "piece_m2", "luc_class"], ascending=[True, False, True]
+    ).drop_duplicates("site_id").set_index("site_id")["luc_class"]
+    hpl = (
+        by_class.reset_index()
+        .loc[lambda frame: frame["luc_class"].isin([1, 2, 3])]
+        .groupby("site_id")["piece_m2"].sum()
+    )
+    mapped = by_class.groupby("site_id").sum()
+    return pd.DataFrame({
+        "luc_class": dominant.reindex(sites["site_id"]).to_numpy(),
+        "hpl_fraction": (hpl.reindex(sites["site_id"]).fillna(0.0)
+                         / unit_area.reindex(sites["site_id"])).to_numpy(),
+        "luc_mapped_fraction": (mapped.reindex(sites["site_id"]).fillna(0.0)
+                                / unit_area.reindex(sites["site_id"])).to_numpy(),
+    }, index=sites.index)
 
 
 def first_present(frame: gpd.GeoDataFrame, candidates: tuple[str, ...], label: str) -> str:
@@ -300,9 +428,6 @@ def build_sites(
     sites = sites.loc[sites.geometry.area >= minimum_area_ha * 10_000.0].reset_index(drop=True)
 
     luc_column = first_present(luc, tuple(config["luc_class_fields"]), "luc")
-    sites["luc_class"] = pd.to_numeric(
-        attach_by_point(sites, luc, luc_column, "luc_class"), errors="coerce"
-    )
     if isinstance(solar, gpd.GeoDataFrame):
         solar_column = first_present(solar, tuple(config["solar_value_fields"]), "solar")
         sites["solar_kwh_m2"] = pd.to_numeric(
@@ -310,6 +435,28 @@ def build_sites(
         )
     else:
         sites["solar_kwh_m2"] = sample_raster(sites, solar, config["layers"]["solar"], "solar")
+    # A stable order for the file, and identifiers that do not depend on it.
+    bounds = sites.geometry.bounds
+    sites = sites.assign(_x=bounds["minx"].round(1), _y=bounds["miny"].round(1))
+    sites = sites.sort_values(["_x", "_y", "lcdb_class"], kind="stable").reset_index(drop=True)
+    sites = sites.drop(columns=["_x", "_y"])
+    if parcels is not None:
+        sites["site_id"] = site_identifiers(sites)
+        sites["parcel_id"] = pd.to_numeric(sites["id"], errors="coerce").astype("Int64")
+    else:
+        sites["site_id"] = [
+            f"LCDB-{class_code(cover)}-{geometry_fingerprint(geometry)}"
+            for cover, geometry in zip(sites["lcdb_class"], sites.geometry)
+        ]
+    if sites["site_id"].duplicated().any():
+        offender = sites.loc[sites["site_id"].duplicated(), "site_id"].iloc[0]
+        raise ValueError(f"site_id is not unique: {offender}")
+    # LUC by coverage, not by the class under one point. Done after the
+    # identifiers exist because the overlay is keyed on site_id.
+    coverage = luc_coverage(sites, luc, luc_column)
+    sites["luc_class"] = coverage["luc_class"]
+    sites["hpl_fraction"] = coverage["hpl_fraction"].round(4)
+    sites["luc_mapped_fraction"] = coverage["luc_mapped_fraction"].round(4)
     # A site with no LUC or no solar value cannot be screened by S-05 or S-07.
     # Dropping it silently would hide a join failure, so report and quarantine.
     incomplete = sites["luc_class"].isna() | sites["solar_kwh_m2"].isna()
@@ -319,16 +466,10 @@ def build_sites(
             "and are written to sites_unattributed for inspection",
             flush=True,
         )
-    # Identifiers must not depend on the order the service happened to page
-    # features back, or a re-download would renumber every site. Sort on the
-    # geometry's own south-west corner, which is a property of the land.
-    bounds = sites.geometry.bounds
-    sites = sites.assign(_x=bounds["minx"].round(1), _y=bounds["miny"].round(1))
-    sites = sites.sort_values(["_x", "_y", "lcdb_class"], kind="stable").reset_index(drop=True)
-    sites = sites.drop(columns=["_x", "_y"])
-    prefix = "PARCEL" if parcels is not None else "LCDB"
-    sites["site_id"] = [f"{prefix}-{index:06d}" for index in range(len(sites))]
-    columns = ["site_id", "lcdb_class", "luc_class", "solar_kwh_m2"]
+    columns = ["site_id", "lcdb_class", "luc_class", "solar_kwh_m2",
+               "hpl_fraction", "luc_mapped_fraction"]
+    if "parcel_id" in sites.columns:
+        columns.append("parcel_id")
     # Parcel attributes are carried through for the reviewer: an appellation and
     # a title reference is what turns a polygon into something you can look up.
     columns += [
@@ -459,6 +600,25 @@ def main() -> None:
     for name in ("conservation", "powerlines", "roads"):
         written[name] = write_layer(downloaded[name], output / f"{name}.gpkg", name)
 
+    association = pd.DataFrame(columns=["napalis_id", "parcel_id"])
+    table_id = settings.get("protected_area_parcel_table")
+    if table_id and "napalis_id" in downloaded["conservation"].columns:
+        napalis_ids = sorted(set(
+            pd.to_numeric(downloaded["conservation"]["napalis_id"], errors="coerce")
+            .dropna().astype("int64")
+        ))
+        print(f"  conservation_parcels: table-{table_id} for {len(napalis_ids)} protected areas",
+              flush=True)
+        service, key = services["linz"]
+        association = fetch_protected_area_parcels(
+            service, key, int(table_id), napalis_ids, arguments.timeout
+        )
+        association.to_csv(output / "conservation_parcels.csv", index=False)
+        written["conservation_parcels"] = int(len(association))
+        covered = association["napalis_id"].nunique() if not association.empty else 0
+        print(f"  conservation_parcels: {len(association)} rows covering {covered} of "
+              f"{len(napalis_ids)} protected areas", flush=True)
+
     relative = output.relative_to(ROOT).as_posix()
     print(json.dumps({
         "output_directory": relative,
@@ -471,7 +631,9 @@ def main() -> None:
             f"solar-screen --sites {relative}/sites.gpkg "
             f"--conservation {relative}/conservation.gpkg "
             f"--powerlines {relative}/powerlines.gpkg "
-            f"--roads {relative}/roads.gpkg --output outputs/real"
+            f"--roads {relative}/roads.gpkg "
+            f"--conservation-parcels {relative}/conservation_parcels.csv "
+            f"--output outputs/real"
         ),
     }, indent=2))
 
