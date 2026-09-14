@@ -72,6 +72,16 @@ def geometry_sha256(geometry: BaseGeometry, precision_m: float = 0.01) -> str:
     This is deliberately not the short hash inside a ``site_id``: that one is an
     identifier and wants to stay readable, this one is an integrity check and
     wants the full digest.
+
+    Known edge: rounding has edges. A coordinate sitting within floating-point
+    noise of a rounding boundary - x.xx5 - can round either way between two
+    reads of the same file through different drivers, and the digest then
+    changes for a polygon that did not move. The failure is a mismatch that
+    asks for the terrain table to be rebuilt, never a stale slope accepted as
+    current, so the direction is the safe one; a check that cries wolf costs a
+    re-run, a check that sleeps costs a wrong exclusion. It also means the
+    "sub-millimetre movement is invisible" property holds at a general position
+    and not at a rounding boundary.
     """
     if geometry is None or geometry.is_empty:
         return ""
