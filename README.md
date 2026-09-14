@@ -416,12 +416,23 @@ look up. Each unit carries its appellation, title and parcel intent.
 > records which path decided it in `s04_basis`: **292 by association, 25 by
 > geometry, 14 by both — 331 in total, down from 1,473.**
 >
-> **The reconciliation is the check on whether identity can be trusted.** Run
-> both ways over the whole population: they agree on 10,693 of 10,726 units.
-> Identity excludes **0** units geometry clears, and geometry excludes **33**
-> that the association table says are not protected-area parcels — 33 units next
-> to a protected area, not inside one. The identity join adds no exclusions of
-> its own and removes a thousand that were never real.
+> **The reconciliation is the check on whether identity can be trusted.** Both
+> methods are run over the whole population and compared. Geometry disagreeing
+> is two different outcomes, and only one of them excludes anything, so they are
+> counted apart:
+>
+> | | units |
+> |---|---:|
+> | Both methods exclude | 306 |
+> | Identity excludes, geometry clears | **0** |
+> | Geometry flags, no association row — fallback excludes | 25 |
+> | Geometry flags, but the table says this parcel is not part of that area — not excluded | 8 |
+> | Both methods clear | 10,387 |
+>
+> So the exclusion total is arithmetic: **306 by identity + 25 by fallback =
+> 331**, against 1,473 before. The identity join adds **no** exclusions of its
+> own — it removes a thousand that were never real, and the 8 it holds back are
+> units next to a protected area rather than inside one.
 
 ### S-05 is a coverage question, and it carries its own error bar
 

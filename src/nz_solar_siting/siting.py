@@ -265,13 +265,22 @@ def evaluate_sites(
     if identity_available:
         all_overlap = _overlap_area_m2(out, conservation)
         geometry_says = all_overlap > conservation_band_m2
+        geometry_only = ~identity_excluded & geometry_says
+        # "geometry disagrees" is two different things, and only one of them
+        # changes the outcome. Where the protected area has no association row
+        # the fallback runs and the unit is excluded; where it has one, the
+        # table says this parcel is not part of it and the unit is next door,
+        # so nothing excludes it. Reported apart, the exclusion total is
+        # arithmetic the reader can do: identity + fallback-only.
         out.attrs["s04_reconciliation"] = {
             "identity_available": True,
             "agree_excluded": int((identity_excluded & geometry_says).sum()),
             "identity_only": int((identity_excluded & ~geometry_says).sum()),
-            "geometry_only": int((~identity_excluded & geometry_says).sum()),
+            "geometry_only_excluded_by_fallback": int((geometry_only & geometric_excluded).sum()),
+            "geometry_only_cleared_by_association": int((geometry_only & ~geometric_excluded).sum()),
             "agree_clear": int((~identity_excluded & ~geometry_says).sum()),
             "protected_areas_without_association": int(len(geometric_layer)),
+            "excluded_total": int((identity_excluded | geometric_excluded).sum()),
         }
     else:
         out.attrs["s04_reconciliation"] = {"identity_available": False}
