@@ -159,3 +159,106 @@ def test_the_audit_publishes_the_coverage_columns():
         _sites(hpl_fraction=[0.9], luc_mapped_fraction=[0.4]), EMPTY, NETWORK, NETWORK
     )
     assert {"S05_verify_luc", "luc_mapped_fraction"} <= set(audit.columns)
+
+
+# ------------------------------------------------- how much was sampled
+
+def _terrain_with_coverage(fraction, slope=2.0) -> pd.DataFrame:
+    return pd.DataFrame({
+        "site_id": ["A"], "mean_slope_deg": [slope], "sampled_fraction": [fraction],
+    })
+
+
+def test_a_slope_averaged_over_part_of_a_site_is_flagged_for_review():
+    """A tile that is ocean returns 404, and the inland half answers for the site."""
+    results, _ = evaluate_sites(
+        _sites(), EMPTY, NETWORK, NETWORK, terrain=_terrain_with_coverage(0.42)
+    )
+    assert bool(results["S08_verify_slope"].iloc[0])
+    assert results["slope_sampled_fraction"].iloc[0] == 0.42
+    assert results["mean_slope_deg"].iloc[0] == 2.0, "the value is still published"
+
+
+def test_complete_coverage_is_above_one_and_is_not_flagged():
+    """Cells count when they touch, so a covered polygon over-samples itself."""
+    results, _ = evaluate_sites(
+        _sites(), EMPTY, NETWORK, NETWORK, terrain=_terrain_with_coverage(1.11)
+    )
+    assert not bool(results["S08_verify_slope"].iloc[0])
+
+
+def test_coverage_short_of_the_threshold_still_excludes_on_a_steep_slope():
+    """Unknown coverage is a review flag, not an amnesty for 30 degrees."""
+    results, _ = evaluate_sites(
+        _sites(), EMPTY, NETWORK, NETWORK,
+        terrain=_terrain_with_coverage(0.42, slope=30.0),
+    )
+    assert not bool(results["S08_pass"].iloc[0])
+    assert bool(results["S08_verify_slope"].iloc[0])
+
+
+def test_a_table_without_the_coverage_column_is_still_accepted():
+    results, _ = evaluate_sites(_sites(), EMPTY, NETWORK, NETWORK, terrain=_terrain())
+    assert not bool(results["S08_verify_slope"].iloc[0])
+    assert pd.isna(results["slope_sampled_fraction"].iloc[0])
+
+
+def test_the_threshold_is_configurable():
+    from dataclasses import replace
+
+    from nz_solar_siting.siting import SitingConfig
+
+    strict = replace(SitingConfig(), minimum_slope_sample_coverage=1.5)
+    results, _ = evaluate_sites(
+        _sites(), EMPTY, NETWORK, NETWORK, strict, terrain=_terrain_with_coverage(1.11)
+    )
+    assert bool(results["S08_verify_slope"].iloc[0])
+
+
+def test_the_committed_terrain_table_would_pass_the_threshold():
+    """Every sampled site over-covers itself, which is what makes 0.95 safe.
+
+    The committed table predates the column, so the fraction is recomputed the
+    way the producer now writes it: samples x cell area / polygon area, with the
+    real 1-arcsecond cell rather than a nominal 30 x 30 m.
+    """
+    import importlib.util
+
+    from nz_solar_siting.config import load_project_config
+    from nz_solar_siting.geometry import area_hectares, has_width_core
+    from nz_solar_siting.osm_layers import read_osm_layer
+
+    spec = importlib.util.spec_from_file_location(
+        "compute_site_terrain", ROOT / "scripts" / "compute_site_terrain.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    config = load_project_config(ROOT / "config" / "assumptions.yml").siting
+    farmland = read_osm_layer("farmland", ROOT / "data" / "derived" / "osm")
+    sites = farmland.copy()
+    sites["area_ha"] = sites.geometry.map(area_hectares)
+    sites = sites.loc[sites["area_ha"] >= config.minimum_area_ha]
+    sites = sites.loc[
+        sites.geometry.map(lambda g: has_width_core(g, config.minimum_average_width_m))
+    ].copy()
+    sites["site_id"] = "OSM-" + sites["osm_id"].astype("int64").astype(str)
+    sites["area_m2"] = sites.geometry.area
+
+    table = pd.read_csv(ROOT / "data" / "derived" / "osm" / "site_terrain.csv")
+    merged = sites[["site_id", "area_m2"]].merge(
+        table[["site_id", "slope_samples"]], on="site_id", validate="one_to_one"
+    )
+
+    class _Transform:
+        a = 1.0 / 3600.0
+        e = -1.0 / 3600.0
+
+    cell = module.cell_area_m2(_Transform(), -44.0)
+    assert 600.0 < cell < 800.0, "a 1-arcsecond cell here is nowhere near 900 m2"
+    fraction = merged["slope_samples"] * cell / merged["area_m2"]
+    assert fraction.min() >= 1.0, (
+        "touch-based sampling cannot under-count a covered polygon, so a full "
+        f"sample sits above 1; lowest was {fraction.min():.3f}"
+    )
+    assert (fraction >= config.minimum_slope_sample_coverage).all()

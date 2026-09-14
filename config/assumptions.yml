@@ -27,6 +27,15 @@ siting:
   # exclusion, not a preference. A site with no slope value is not excluded and
   # not passed either - it is flagged for verification.
   maximum_mean_slope_deg: 10.0
+  # S-08 again: how much of a polygon the DEM has to actually cover before its
+  # mean slope describes the polygon rather than the part that was readable.
+  # Cells are sampled when they touch the polygon at all, so a fully covered
+  # polygon always samples at least its own area - the ratio sits above 1 by
+  # construction, and every one of the 2,356 committed sites is at or above
+  # 1.018. Anything below 1 is unread ground, not a measurement artefact. The
+  # 0.95 is tolerance for the cell-area conversion drifting with latitude
+  # across a tile, not a level of missing data anyone considers acceptable.
+  minimum_slope_sample_coverage: 0.95
   # S-10: coastal hazard review. Not an exclusion - coastal land is not
   # automatically undevelopable - but a 30-year asset within a kilometre of an
   # open coast needs an erosion and inundation assessment before anything else.

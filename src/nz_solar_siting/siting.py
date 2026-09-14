@@ -69,6 +69,9 @@ class SitingConfig:
     # is computed elsewhere and arrives as a column, so this module never needs
     # a raster reader.
     maximum_mean_slope_deg: float = 10.0
+    # Share of a polygon the DEM must cover before its mean slope is taken to
+    # describe the polygon. Above 1 by construction when coverage is complete.
+    minimum_slope_sample_coverage: float = 0.95
     coastal_review_distance_m: float = 1000.0
     # Positional accuracy of each pair of layers a rule intersects, in metres.
     # An overlap smaller than accuracy x boundary length cannot be told apart
@@ -396,9 +399,26 @@ def evaluate_sites(
         slope = pd.to_numeric(sites["mean_slope_deg"], errors="coerce")
     else:
         slope = pd.Series(np.nan, index=out.index, dtype=float)
+    # How much of each polygon the DEM actually covered. A mean over part of a
+    # site is a mean of that part: a site half of whose area fell in a tile that
+    # returned 404 because it is mostly ocean gets the slope of its inland half,
+    # which is a real number describing the wrong thing. One ratio catches every
+    # reason a sample is short - a missing tile, a skipped download, a void - so
+    # neither this rule nor its reader has to know which happened, and the
+    # outcome is the one S-08 already has for a slope it does not know.
+    coverage = pd.Series(np.nan, index=out.index, dtype=float)
+    if terrain is not None and "sampled_fraction" in terrain.columns:
+        coverage = pd.to_numeric(
+            out["site_id"].map(terrain.set_index("site_id")["sampled_fraction"]),
+            errors="coerce",
+        )
+    elif "slope_sampled_fraction" in sites.columns:
+        coverage = pd.to_numeric(sites["slope_sampled_fraction"], errors="coerce")
+    out["slope_sampled_fraction"] = coverage.round(4)
+    under_sampled = coverage.notna() & (coverage < cfg.minimum_slope_sample_coverage)
     out["mean_slope_deg"] = slope.round(3)
     out["S08_pass"] = ~(slope > cfg.maximum_mean_slope_deg)
-    out["S08_verify_slope"] = slope.isna()
+    out["S08_verify_slope"] = slope.isna() | under_sampled
 
     # S-09 mapped water, S-10 coastal proximity. Round for publication, compare
     # on the measurement - the same order S-01 already follows. It matters most
@@ -465,7 +485,8 @@ def evaluate_sites(
         "S05_hpl_flag", "s05_basis", "hpl_fraction", "luc_noise_band",
         "luc_mapped_fraction", "S05_verify_luc",
         "s04_basis", "conservation_overlap_m2", "conservation_noise_band_m2",
-        "S06_verify_grid", "S08_verify_slope", "S10_coastal_flag",
+        "S06_verify_grid", "S08_verify_slope", "slope_sampled_fraction",
+        "S10_coastal_flag",
     ]].copy()
     audit.attrs["s04_reconciliation"] = out.attrs["s04_reconciliation"]
     return out, audit

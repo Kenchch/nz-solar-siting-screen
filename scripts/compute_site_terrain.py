@@ -104,12 +104,31 @@ def required_tiles(bounds: pd.DataFrame) -> list[tuple[int, int]]:
     return sorted(tiles)
 
 
-def slope_degrees(elevation: np.ndarray, transform, latitude_deg: float) -> np.ndarray:
-    """Slope magnitude in degrees on a geographic grid."""
+def cell_area_m2(transform, latitude_deg: float) -> float:
+    """Ground area of one grid cell, which is not 30 x 30 m on a geographic grid.
+
+    A 1-arcsecond cell is about 30.9 m north-south everywhere and about 22.2 m
+    east-west at this latitude, so it covers roughly 687 m2 rather than the
+    nominal 900. Sampling coverage is a ratio against the polygon's own area, so
+    using the nominal figure would understate every count by a third and leave
+    the threshold absorbing a unit error instead of meaning something.
+    """
+    spacing_y, spacing_x = _cell_spacing_m(transform, latitude_deg)
+    return float(spacing_x * spacing_y)
+
+
+def _cell_spacing_m(transform, latitude_deg: float) -> tuple[float, float]:
     metres_per_degree_lat = 111_132.0
     metres_per_degree_lon = 111_320.0 * math.cos(math.radians(latitude_deg))
-    spacing_y = abs(transform.e) * metres_per_degree_lat
-    spacing_x = abs(transform.a) * metres_per_degree_lon
+    return (
+        abs(transform.e) * metres_per_degree_lat,
+        abs(transform.a) * metres_per_degree_lon,
+    )
+
+
+def slope_degrees(elevation: np.ndarray, transform, latitude_deg: float) -> np.ndarray:
+    """Slope magnitude in degrees on a geographic grid."""
+    spacing_y, spacing_x = _cell_spacing_m(transform, latitude_deg)
     dy, dx = np.gradient(elevation.astype("float64"), spacing_y, spacing_x)
     return np.degrees(np.arctan(np.hypot(dx, dy)))
 
@@ -199,6 +218,7 @@ def main() -> None:
                     "site_id": sites.at[index, "site_id"],
                     "dem_tile": tile_stem(lat, lon),
                     "samples": values,
+                    "cell_m2": cell_area_m2(dataset.transform, lat + 0.5),
                 })
 
 
@@ -212,7 +232,11 @@ def main() -> None:
         )
         entry["tiles"].append(record["dem_tile"])
         entry["samples"].append(record["samples"])
+        entry["sampled_m2"] = entry.get("sampled_m2", 0.0) + (
+            record["samples"].size * record["cell_m2"]
+        )
     digests = dict(zip(sites["site_id"], sites.geometry.map(geometry_sha256)))
+    site_area_m2 = dict(zip(sites["site_id"], sites.geometry.area))
     rows = []
     for entry in pooled.values():
         values = np.concatenate(entry["samples"])
@@ -224,6 +248,16 @@ def main() -> None:
             "dem_tile": ";".join(sorted(set(entry["tiles"]))),
             "dem_tiles_used": len(set(entry["tiles"])),
             "slope_samples": int(values.size),
+            # How much of the polygon actually had a DEM under it. Cells are
+            # included when they touch the polygon at all, so a fully covered
+            # polygon always samples at least its own area and this sits above
+            # 1. Below it, some of the polygon was never read - a tile that is
+            # ocean and returns 404, a tile the download skipped, a void. One
+            # ratio covers every reason, so the screen does not have to know
+            # which one happened.
+            "sampled_fraction": round(
+                float(entry["sampled_m2"] / site_area_m2[entry["site_id"]]), 4
+            ),
             "mean_slope_deg": float(values.mean()),
             "p90_slope_deg": float(np.percentile(values, 90)),
         })
@@ -232,6 +266,10 @@ def main() -> None:
     if missing:
         print(f"warning: no DEM samples for {len(missing)} sites, e.g. {missing[:3]}")
     terrain = terrain.round({"mean_slope_deg": 3, "p90_slope_deg": 3})
+    thin = terrain.loc[terrain["sampled_fraction"] < 0.95]
+    if not thin.empty:
+        print(f"sites with incomplete DEM coverage: {len(thin)} "
+              f"(lowest {thin['sampled_fraction'].min():.2f}); the screen flags these")
     output = ROOT / arguments.output
     terrain.to_csv(output, index=False)
     straddling = int((terrain["dem_tiles_used"] > 1).sum())
