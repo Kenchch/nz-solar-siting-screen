@@ -48,10 +48,12 @@ def run_screening(
     terrain: pd.DataFrame | None = None,
     water: gpd.GeoDataFrame | None = None,
     coastline: gpd.GeoDataFrame | None = None,
+    conservation_parcels: pd.DataFrame | None = None,
 ) -> dict[str, object]:
     results, audit = evaluate_sites(
         sites, conservation, powerlines, roads, config,
         terrain=terrain, water=water, coastline=coastline,
+        conservation_parcels=conservation_parcels,
     )
     reject_rate = float((results["status"] == "quarantine").mean())
     output = Path(output_dir)
@@ -75,6 +77,9 @@ def run_screening(
             rule for rule in str(results["rules_not_applied"].iloc[0]).split(";") if rule
         ] if len(results) else [],
         "slope_unknown": int(results["S08_verify_slope"].sum()),
+        "hpl_flagged": int(results["S05_hpl_flag"].sum()),
+        "s05_basis": sorted(set(results["s05_basis"])) if len(results) else [],
+        "s04_reconciliation": results.attrs.get("s04_reconciliation", {}),
         "coastal_review_flagged": int(results["S10_coastal_flag"].sum()),
         "grid_comparison": comparison,
     }
@@ -94,6 +99,12 @@ def main() -> None:
         "--terrain",
         help="CSV with site_id and mean_slope_deg, from scripts/compute_site_terrain.py. "
              "Without it S-08 is not applied and every site is flagged slope-unknown.",
+    )
+    parser.add_argument(
+        "--conservation-parcels",
+        help="CSV of the LINZ Protected Area / Parcel association (table 3561) with "
+             "napalis_id and parcel_id. With it S-04 is an identity test on parcel_id and "
+             "geometry is used only for protected areas the table does not cover.",
     )
     parser.add_argument("--water", help="Mapped water and wetland polygons for S-09")
     parser.add_argument("--coastline", help="Coastline for the S-10 proximity flag")
@@ -125,6 +136,9 @@ def main() -> None:
         terrain=pd.read_csv(args.terrain) if args.terrain else None,
         water=read_layer(args.water, name="water") if args.water else None,
         coastline=read_layer(args.coastline, name="coastline") if args.coastline else None,
+        conservation_parcels=(
+            pd.read_csv(args.conservation_parcels) if args.conservation_parcels else None
+        ),
     )
     print(json.dumps(result, indent=2))
 

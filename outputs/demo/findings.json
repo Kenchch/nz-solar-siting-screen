@@ -13,6 +13,13 @@
     "S-10"
   ],
   "slope_unknown": 12,
+  "hpl_flagged": 6,
+  "s05_basis": [
+    "dominant_class"
+  ],
+  "s04_reconciliation": {
+    "identity_available": false
+  },
   "coastal_review_flagged": 0,
   "grid_comparison": {
     "n": 4,

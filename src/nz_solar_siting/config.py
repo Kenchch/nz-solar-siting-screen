@@ -42,6 +42,18 @@ def load_project_config(path: str | Path) -> ProjectConfig:
         )
         for name, band in values["voltage_tiers"].items()
     )
+    accuracy = values["source_accuracy"]
+    for name in ("conservation_overlay_m", "luc_overlay_m"):
+        if float(accuracy[name]) < 0:
+            raise ValueError(f"siting.source_accuracy.{name} must not be negative")
+        # A number with no stated source is a number someone tuned. The basis
+        # string is what stops that, so it is required, not decorative.
+        basis = str(accuracy.get(name.replace("_m", "_basis"), "")).strip()
+        if len(basis) < 40:
+            raise ValueError(
+                f"siting.source_accuracy.{name} needs a {name.replace('_m', '_basis')} "
+                "quoting what the publisher says about the layer"
+            )
     connection_tier = str(values["connection_tier"])
     if connection_tier not in {tier.name for tier in tiers}:
         raise ValueError(f"siting.connection_tier {connection_tier!r} is not a configured tier")
@@ -57,6 +69,8 @@ def load_project_config(path: str | Path) -> ProjectConfig:
         voltage_column=str(values["voltage_column"]),
         maximum_mean_slope_deg=float(values["maximum_mean_slope_deg"]),
         coastal_review_distance_m=float(values["coastal_review_distance_m"]),
+        conservation_overlay_accuracy_m=float(accuracy["conservation_overlay_m"]),
+        luc_overlay_accuracy_m=float(accuracy["luc_overlay_m"]),
         solar_score_weight=float(weights["solar_resource"]),
         area_score_weight=float(weights["area"]),
     )

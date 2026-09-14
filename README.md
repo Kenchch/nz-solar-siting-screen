@@ -13,7 +13,7 @@ They are **reported side by side, not integrated**, and the seams are worth nami
 ## Two empirical findings, two method warnings
 
 1. **Empirical — generation is not revenue, and the reason is seasonal, not midday cannibalisation.** Official Electricity Authority half-hourly final prices at ISL0661 give apparent-solar-time capture rates from **82.5% to 110.3%** over 2019–2025 for a north-facing 25° array. Five of seven annual values are below 100%; 2019 and 2023 are above it. The worst year is 2024 at **82.5%**, a gap of 17.5 points below the time-average price. The decomposition below attributes **−17.7 points of it to seasonal mismatch**; the intraday term is **+0.2 points**, so the shape of the day actually gave a little value back. The discount is dry-year winter prices arriving when a fixed-tilt array produces least, not midday price suppression.
-2. **Empirical — a road proxy tracks the low-voltage network, and its usefulness falls monotonically with voltage.** Spearman rank correlation between distance-to-road and distance-to-network, on **10,684 real Canterbury cadastral units**: **0.57** for ≤22 kV distribution, **0.38** for the 33–66 kV tier a project actually connects at, **0.045** for ≥110 kV transmission, **0.023** for the LINZ Topo50 powerline layer. The ordering is the finding and it holds on a second, differently-built population. The magnitudes do not — see [the correction](#correction-the-1-of-the-variance-figure-was-population-specific). Roads find the poles that are everywhere and say almost nothing about the connection that matters. This is why both distances and a `verify_grid` flag stay visible and why grid distance was removed from `screen_score` entirely. See [the OSM study](#measuring-the-grid-proxy-disagreement-on-real-geometry) for the caveats, which are substantial.
+2. **Empirical — a road proxy tracks the low-voltage network, and its usefulness falls monotonically with voltage.** Spearman rank correlation between distance-to-road and distance-to-network, on **10,726 real Canterbury cadastral units**: **0.57** for ≤22 kV distribution, **0.38** for the 33–66 kV tier a project actually connects at, **0.048** for ≥110 kV transmission, **0.028** for the LINZ Topo50 powerline layer. The ordering is the finding and it holds on a second, differently-built population. The magnitudes do not — see [the correction](#correction-the-1-of-the-variance-figure-was-population-specific). Roads find the poles that are everywhere and say almost nothing about the connection that matters. This is why both distances and a `verify_grid` flag stay visible and why grid distance was removed from `screen_score` entirely. See [the OSM study](#measuring-the-grid-proxy-disagreement-on-real-geometry) for the caveats, which are substantial.
 3. **Method warning — the screen was missing terrain and water, and an aerial check is what found it.** Of the twenty largest grid-proxy disagreements, **11 are not developable land at all** — coastal barrier spit, wetland margin, or 14–24° peninsula slope. None is a grid problem. S-08 slope was documented as "not implemented" and there was no water or coastal rule at all; all three now exist, built from free inputs, and on that sample they **exclude 8 of the 11, flag 2 more, and miss 1**. On a **held-out** second sample of twenty they reach 3 of 5, miss 2 — both land-use failures that only real land-cover data can catch — and wrongly exclude 1 good site over a farm irrigation pond. Those samples were selected on disagreement, so neither failure rate is a population rate.
 4. **Method warning — a single width proxy changes the screening answer.** The 180 m inward-buffer test is the S-02 baseline; `2A/P` remains beside it as an audit comparator. The deterministic geometry stress case is a 200 × 200 m square: the core test passes while `2A/P` reports 100 m and fails. The run manifest reports the number of disagreements instead of hiding this modelling choice.
 
@@ -141,7 +141,7 @@ population. Re-running it on the cadastral units — same rules, same networks,
 a differently-built set of polygons — moves the connection-tier number a long
 way:
 
-| Network basis | ρ on OSM farmland (n = 2,356) | ρ on parcel units (n = 10,684) |
+| Network basis | ρ on OSM farmland (n = 2,356) | ρ on parcel units (n = 10,726) |
 |---|---:|---:|
 | ≤22 kV distribution | 0.478 | 0.570 |
 | **33–66 kV connection tier** | **0.108** | **0.379** |
@@ -152,7 +152,7 @@ way:
 The **ordering survives** — road proximity is most informative about the
 lowest-voltage network and least informative about the highest, on both
 populations. The **magnitude does not**: on real cadastral units a road proxy
-explains about **14%** of the rank variance in connection-tier distance, not 1%.
+explains about **14.6%** of the rank variance in connection-tier distance, not 1%.
 
 So the sentence "explains about 1% of the variance" was true of the population I
 measured and not of the one a developer would actually screen. The OSM farmland
@@ -165,17 +165,17 @@ published was wrong.
 
 The ordering below is the finding, and it is monotonic in voltage. A road centreline is a good stand-in for the low-voltage network — of course it is, the poles follow the road — and a steadily worse one as the voltage rises. Stated on the population a developer would actually screen:
 
-> **Cadastral units, n = 10,684.** Road distance against 33–66 kV distance: Spearman ρ = **0.379**, 95% CI **[0.363, 0.395]**, p < 10⁻³⁰⁰, explaining **14.3% of the rank variance**. Against ≤22 kV distribution: ρ = **0.570**. Against ≥110 kV transmission: ρ = **0.045**.
+> **Cadastral units, n = 10,726.** Road distance against 33–66 kV distance: Spearman ρ = **0.382**, 95% CI **[0.366, 0.398]**, p < 10⁻³⁰⁰, explaining **14.6% of the rank variance**. Against ≤22 kV distribution: ρ = **0.572**. Against ≥110 kV transmission: ρ = **0.048**.
 
 ρ² is the variance explained **in the ranks**, not in the raw distances — Spearman is computed on ranks, and a rank correlation says how well the ordering is reproduced, not how well the metres are. The ordering is what a screen uses, so it is the right quantity here, but it should be named accurately.
 
 So a road proxy carries real information about where the low-voltage network is, appreciably less about the tier a project connects at, and effectively none about transmission. Fourteen per cent is not nothing and it is not a substitute: it leaves 86% of the rank variation in connection-tier distance unexplained, which is the part that decides a project.
 
-One caveat on the p-values, which applies to every correlation in this section. Cadastral units are spatially autocorrelated — neighbouring parcels share both a road and a feeder — so the effective sample size is smaller than n and the p-values are optimistic. At n = 10,684 with p < 10⁻³⁰⁰ no plausible correction reverses the sign or the ordering, which is why a spatial test has not been run; the confidence intervals should be read as narrower than they deserve to be. The comparison publishes rho, the p-value, the confidence interval and the variance explained together, computed with `scipy.stats.spearmanr`, so that no half of that sentence can be quoted without the others.
+One caveat on the p-values, which applies to every correlation in this section. Cadastral units are spatially autocorrelated — neighbouring parcels share both a road and a feeder — so the effective sample size is smaller than n and the p-values are optimistic. At n = 10,726 with p < 10⁻³⁰⁰ no plausible correction reverses the sign or the ordering, which is why a spatial test has not been run; the confidence intervals should be read as narrower than they deserve to be. The comparison publishes rho, the p-value, the confidence interval and the variance explained together, computed with `scipy.stats.spearmanr`, so that no half of that sentence can be quoted without the others.
 
 The 33–66 kV tier is also not a stand-in for transmission (ρ = 0.31 between those two), so there is no single "distance to the grid" number to put in a score.
 
-**If you take one sentence to an interview:** on real Canterbury cadastral units, distance to a road explains about **14%** of the rank variance in distance to the 33–66 kV network, and the figure falls monotonically with voltage — 0.57 for ≤22 kV, 0.38 for 33–66 kV, 0.045 for ≥110 kV — an ordering that holds on two independently built populations. A road proxy tells you where the low-voltage poles are, not where you could connect.
+**If you take one sentence to an interview:** on real Canterbury cadastral units, distance to a road explains about **14.6%** of the rank variance in distance to the 33–66 kV network, and the figure falls monotonically with voltage — 0.57 for ≤22 kV, 0.38 for 33–66 kV, 0.048 for ≥110 kV — an ordering that holds on two independently built populations. A road proxy tells you where the low-voltage poles are, not where you could connect.
 
 ### The verify flag had to be re-cut too
 
@@ -383,34 +383,86 @@ was calling candidates was steep or wet.
 ### On the parcel basis
 
 Cutting usable cover to parcel boundaries changes the population rather than
-filtering it. The same bounding box yields **10,684 candidate units**, and the
-screen returns **7,313 candidates against 3,371 quarantined**:
+filtering it. The same bounding box yields **10,726 candidate units**, and the
+screen returns **8,120 candidates against 2,606 quarantined**:
 
 | | Land-cover polygons | Parcel ∩ cover |
 |---|---:|---:|
-| Units assembled | 1,166 | 10,684 |
-| Candidates | 404 | 7,313 |
-| Median candidate area | 46.9 ha | **40.2 ha** |
+| Units assembled | 1,166 | 10,726 |
+| Candidates | 404 | 8,120 |
+| Median candidate area | 46.9 ha | **40.4 ha** |
 | Largest candidate | 2,524 ha | **625 ha** |
-| S-05 HPL flagged | 197 | 5,343 |
+| S-05 HPL flagged | 197 | 6,058 |
 
 The largest candidate is now *Lot 2 DP 361816* at 625 ha — an appellation and a
 title reference, which is what turns a polygon into something a reviewer can
 look up. Each unit carries its appellation, title and parcel intent.
 
-> **Open problem: S-04 is excluding on digitising slivers.** The rule register
-> says "no material intersection", and the screen now measures overlap area
-> rather than accepting a shared boundary as an overlap. On this population that
-> changes nothing — all 1,473 conservation hits have a positive overlap, because
-> LINZ Protected Areas and LINZ cadastral parcels are digitised independently and
-> do not share exact edges. What they do share is slivers: **1,103 of those 1,473
-> overlap by 1 m² or less**, and **771 units are quarantined by S-04 alone on a
-> sub-square-metre overlap** — 23% of everything in quarantine. A 20 ha rule
-> excluding a site over 1 m² of a neighbouring layer is not measuring
-> conservation status, it is measuring digitising noise. Deciding what "material"
-> should mean is a threshold choice, and picking one against the population that
-> exposed it is how the in-sample problem started, so it is reported here and
-> left for its own change rather than tuned in place.
+> **What S-04 was actually measuring, and why it is not a geometry rule any more.**
+> The previous run excluded **1,473** units for intersecting conservation land.
+> **1,103 of those overlapped by 1 m² or less**, and 771 were quarantined on that
+> alone. The reason is in LINZ's own description of the Protected Areas layer:
+> *"The boundaries for most protected areas are derived from the Landonline
+> Primary Parcel(s)."* The two layers are not independent observations of a
+> boundary — they are two renderings of the same boundary, and intersecting them
+> measures the residual between the renderings.
+>
+> So the screen stopped asking geometry. LINZ publishes **table 3561**, which
+> associates each protected area with the parcels it is made of, and a unit now
+> carries its parcel id, so S-04 is an identity test. It is *"most"* and not
+> *"all"* — **3,260 of the 3,342** protected areas in the study area have an
+> association row, and the remaining **82** (marine areas, and areas not defined
+> from the cadastre) still need geometry, against a 0.5 m band. Every unit
+> records which path decided it in `s04_basis`: **292 by association, 25 by
+> geometry, 14 by both — 331 in total, down from 1,473.**
+>
+> **The reconciliation is the check on whether identity can be trusted.** Run
+> both ways over the whole population: they agree on 10,693 of 10,726 units.
+> Identity excludes **0** units geometry clears, and geometry excludes **33**
+> that the association table says are not protected-area parcels — 33 units next
+> to a protected area, not inside one. The identity join adds no exclusions of
+> its own and removes a thousand that were never real.
+
+### S-05 is a coverage question, and it carries its own error bar
+
+The same fault ran through S-05, one layer over. LUC class was read at a single
+representative point, so a parcel that is 90% LUC 2 with a LUC 6 hollow in the
+middle answered *6*. It is a coverage rule now: `hpl_fraction` is the share of
+the unit mapped LUC 1-3, from an overlay rather than a point. That alone
+recovered **42 units** whose representative point missed the LUC layer entirely
+- unattributed units fell from 58 to 16.
+
+The harder problem is that this pair of layers really is independent, and one of
+them is old. LRIS on NZLRI: the 2021 edition *"involves **no new mapping**"* over
+*"national coverage from mapping between 1973 and 1979 at a scale of
+1:63,360"*, and the 1:50,000 second-edition upgrades are Northland, Wellington,
+Marlborough and Gisborne-East Cape - not Canterbury. **32 m is 0.5 mm at
+1:63,360**, the ordinary cartographic plotting convention; it is a derivation
+from the stated scale, *not* a figure LRIS publishes.
+
+So the flag is not a fixed percentage. Each unit gets its own band,
+`luc_noise_band = 32 m x perimeter / area`, and is flagged when
+`hpl_fraction > luc_noise_band`. A compact 20 ha unit carries a band of about
+**29%** of itself; a long thin one carries more, because it has more boundary to
+misregister. Both columns are published, so the uncertainty is a number on every
+row rather than a paragraph here.
+
+| | Cadastral units (n = 10,726) |
+|---|---:|
+| Median `hpl_fraction` | 0.978 |
+| Median `luc_noise_band` | 0.248 |
+| 90th percentile band | 0.385 |
+| Units smaller than their own registration error (band > 1) | 11 |
+| Units with some LUC 1-3 but inside their own band - not flagged | 715 |
+| Flagged | 6,719 |
+
+> **What the error bar is and is not about.** The NPS-HPL's transitional
+> definition of highly productive land *is* LUC 1-3 as mapped - councils apply
+> the same 1970s map. So the 32 m is uncertainty about **whether this parcel is
+> really good soil**, not about **whether NPS-HPL will be cited against it**.
+> S-05 answers the second question, which is the one that decides whether a
+> consenting pathway exists, and that is why the flag stays useful even though
+> the underlying survey is half a century old and plotted at 1:63,360.
 
 Two limitations have to be stated with it:
 
@@ -483,8 +535,8 @@ actual Canterbury land than against twelve rectangles.
 | S-01 contiguous area | Exclude | at least 20 ha |
 | S-02 usable width | Exclude | 180 m inward-buffer core; retain `2A/P` as comparator |
 | S-03 land cover | Exclude | configured LCDB whitelist |
-| S-04 public conservation land | Exclude | no material intersection: a shared boundary is not an overlap. **Open: "material" is currently any positive overlap, and 771 cadastral units are excluded on 1 m² or less** |
-| S-05 highly productive land | **Flag** | LUC 1–3 → consenting review; never automatic exclusion |
+| S-04 public conservation land | Exclude | parcel identity against LINZ table 3561; geometry only for protected areas that table does not cover |
+| S-05 highly productive land | **Flag** | share of the unit mapped LUC 1–3 above that unit's own `luc_noise_band`; consenting review, never automatic exclusion |
 | S-06 grid proximity | **Flag + published distances** | both distances, both ranks and rank shift retained; **excluded from `screen_score`** |
 | S-07 solar resource | Rank | higher LENZ mean annual solar radiation ranks better |
 | S-08 mean slope | Exclude | mean slope over the polygon above 10°, from Copernicus GLO-30 |

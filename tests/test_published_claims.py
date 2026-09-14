@@ -69,7 +69,9 @@ def test_the_interview_sentence_quotes_the_cadastral_population():
     """One sentence gets repeated out loud, so it has to be the right one."""
     line = next(l for l in README.splitlines() if "take one sentence to an interview" in l)
     assert "cadastral" in line
-    assert "14%" in line
+    # The figure has to be the published one, not a number that was true once.
+    variance = CADASTRAL["correlation_with_road_distance"]["osm_33_66kv"]["variance_explained"]
+    assert f"{variance * 100:.1f}%" in line, line
     assert "monotonic" in line
     for phrase in SUPERSEDED:
         assert phrase not in line
@@ -107,10 +109,12 @@ def test_variance_explained_is_always_qualified_as_rank_variance(path: str):
     The correction reached the README and not the dashboard, which left the two
     published surfaces disagreeing about what the same number means.
     """
+    variance = CADASTRAL["correlation_with_road_distance"]["osm_33_66kv"]["variance_explained"]
+    figure = f"{variance * 100:.1f}%"
     text = (ROOT / path).read_text(encoding="utf-8")
-    for line in text.splitlines():
-        if "14%" not in line and "14.3%" not in line:
-            continue
+    quoting = [line for line in text.splitlines() if figure in line]
+    assert quoting, f"{path} does not quote the published figure {figure}"
+    for line in quoting:
         assert "rank" in line, f"{path}: variance not qualified as rank variance: {line[:120]}"
 
 
@@ -162,13 +166,40 @@ def test_the_median_slope_in_prose_matches_the_study_it_describes():
 
 
 def test_the_rule_table_and_the_register_agree_on_s04():
-    """Three surfaces state S-04; a shared boundary is not an overlap in any."""
-    register = (ROOT / "rules" / "rule_register.csv").read_text(encoding="utf-8")
-    assert "material intersection" in next(
-        line for line in register.splitlines() if line.startswith("S-04,")
+    """Both surfaces have to say S-04 is an identity test, not a geometry test."""
+    register = next(
+        line for line in (ROOT / "rules" / "rule_register.csv")
+        .read_text(encoding="utf-8").splitlines() if line.startswith("S-04,")
     )
     row = next(l for l in README.splitlines() if l.startswith("| S-04 public conservation land"))
-    assert "material intersection" in row, row
+    for surface, text in (("register", register), ("README", row)):
+        assert "3561" in text, f"{surface} does not name the association table: {text[:120]}"
+
+
+def test_every_rule_states_the_accuracy_its_source_supports():
+    """A threshold with no stated source accuracy is a threshold someone tuned."""
+    import csv
+
+    rows = list(csv.DictReader(
+        (ROOT / "rules" / "rule_register.csv").read_text(encoding="utf-8").splitlines()
+    ))
+    assert rows, "the register has rules"
+    for row in rows:
+        basis = (row.get("source_accuracy_basis") or "").strip()
+        assert len(basis) > 30, f"{row['rule_id']} has no source accuracy basis"
+
+
+def test_the_accuracy_bands_quote_the_publisher_rather_than_the_population():
+    """Both epsilons must carry the statement they were derived from."""
+    import yaml
+
+    accuracy = yaml.safe_load(
+        (ROOT / "config" / "assumptions.yml").read_text(encoding="utf-8")
+    )["siting"]["source_accuracy"]
+    assert "Landonline Primary Parcel" in accuracy["conservation_overlay_basis"]
+    luc = accuracy["luc_overlay_basis"]
+    assert "1:63,360" in luc and "no new mapping" in luc
+    assert "NOT a figure LRIS publishes" in luc, "the convention must not read as a quote"
 
 
 def test_the_price_status_line_is_derived_from_the_rows_it_describes():

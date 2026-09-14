@@ -17,7 +17,12 @@ import numpy as np
 import pandas as pd
 from shapely.ops import unary_union
 
-from .geometry import area_hectares, has_width_core, mean_width_area_perimeter
+from .geometry import (
+    area_hectares,
+    has_width_core,
+    mean_width_area_perimeter,
+    overlap_noise_band_m2,
+)
 from .grid_distance import add_grid_proxies, nearest_distance_m, verify_grid_flag
 from .load import assert_nztm
 
@@ -64,6 +69,13 @@ class SitingConfig:
     # a raster reader.
     maximum_mean_slope_deg: float = 10.0
     coastal_review_distance_m: float = 1000.0
+    # Positional accuracy of each pair of layers a rule intersects, in metres.
+    # An overlap smaller than accuracy x boundary length cannot be told apart
+    # from the two publishers disagreeing about where the boundary runs. Both
+    # come from the publishers' own statements, quoted in assumptions.yml under
+    # siting.source_accuracy; neither is tuned against the screened population.
+    conservation_overlay_accuracy_m: float = 0.5
+    luc_overlay_accuracy_m: float = 32.0
     # Published for inspection and used to select review queues. Deliberately
     # not part of S-06: a threshold counted in ranks does not transfer between
     # sample sizes.
@@ -75,6 +87,35 @@ class SitingConfig:
     area_score_weight: float = 0.4
 
 
+def _overlap_area_m2(sites: gpd.GeoDataFrame, others: gpd.GeoDataFrame) -> pd.Series:
+    """Total area each site shares with another layer, in square metres.
+
+    The spatial index finds the candidate pairs and only those pairs are
+    intersected, so a national layer is never unioned. Overlapping features in
+    ``others`` are counted once each, which can double-count where they overlap
+    one another; that errs towards calling an intersection material, which is
+    the safe direction for an exclusion rule.
+    """
+    result = pd.Series(0.0, index=sites.index, dtype=float)
+    if sites.empty or others.empty:
+        return result
+    right = others.geometry.reset_index(drop=True)
+    hits = gpd.sjoin(
+        sites[["geometry"]],
+        gpd.GeoDataFrame(geometry=right, crs=others.crs),
+        how="inner", predicate="intersects",
+    )
+    if hits.empty:
+        return result
+    matched = gpd.GeoSeries(
+        right.to_numpy()[hits["index_right"].to_numpy()], index=hits.index, crs=others.crs
+    )
+    area = sites.geometry.loc[hits.index].intersection(matched, align=False).area
+    summed = area.groupby(level=0).sum()
+    result.loc[summed.index] = summed.to_numpy()
+    return result
+
+
 def evaluate_sites(
     sites: gpd.GeoDataFrame,
     conservation: gpd.GeoDataFrame,
@@ -84,6 +125,7 @@ def evaluate_sites(
     terrain: pd.DataFrame | None = None,
     water: gpd.GeoDataFrame | None = None,
     coastline: gpd.GeoDataFrame | None = None,
+    conservation_parcels: pd.DataFrame | None = None,
 ) -> tuple[gpd.GeoDataFrame, pd.DataFrame]:
     """Apply every rule in the register to one set of layers.
 
@@ -167,36 +209,99 @@ def evaluate_sites(
     out["S03_pass"] = out["lcdb_class"].isin(cfg.usable_lcdb_classes)
     # A spatial-index join rather than a union and a row loop: the union of a
     # national conservation layer is expensive to build and slow to test against.
-    if conservation.empty:
-        out["S04_pass"] = True
+    # S-04. Asking this question with geometry was the wrong question. LINZ
+    # says of Protected Areas that "the boundaries for most protected areas are
+    # derived from the Landonline Primary Parcel(s)", so for most of the layer
+    # the parcel boundary and the protected-area boundary are two renderings of
+    # one line. Intersecting them measures the residual between the renderings:
+    # on the 10,684 cadastral units, 1,103 of 1,473 hits overlapped by 1 m2 or
+    # less and 771 units were quarantined on that alone.
+    #
+    # LINZ publishes the answer instead. Table 3561 associates each protected
+    # area with the parcels it is made of, so where a unit carries its parcel
+    # id the rule is an identity test and no threshold is needed. It is "most"
+    # and not "all", so protected areas with no association row - marine areas,
+    # and areas not defined from the cadastre - still need geometry, and those
+    # get the material-overlap test against the sub-metre band that two
+    # renderings of one boundary can differ by. Every unit records which path
+    # decided it in ``s04_basis``.
+    identity_excluded = pd.Series(False, index=out.index)
+    identity_available = (
+        conservation_parcels is not None
+        and "parcel_id" in out.columns
+        and "parcel_id" in getattr(conservation_parcels, "columns", [])
+    )
+    geometric_layer = conservation
+    if identity_available:
+        protected_parcels = set(
+            pd.to_numeric(conservation_parcels["parcel_id"], errors="coerce").dropna().astype("int64")
+        )
+        identity_excluded = pd.to_numeric(out["parcel_id"], errors="coerce").isin(protected_parcels)
+        if "napalis_id" in conservation.columns and "napalis_id" in conservation_parcels.columns:
+            associated = set(
+                pd.to_numeric(conservation_parcels["napalis_id"], errors="coerce").dropna().astype("int64")
+            )
+            geometric_layer = conservation.loc[
+                ~pd.to_numeric(conservation["napalis_id"], errors="coerce").isin(associated)
+            ]
+    conservation_overlap_m2 = _overlap_area_m2(out, geometric_layer)
+    conservation_band_m2 = out.geometry.map(
+        lambda geometry: overlap_noise_band_m2(geometry, cfg.conservation_overlay_accuracy_m)
+    )
+    geometric_excluded = conservation_overlap_m2 > conservation_band_m2
+    out["conservation_overlap_m2"] = conservation_overlap_m2.round(1)
+    out["conservation_noise_band_m2"] = conservation_band_m2.round(1)
+    out["S04_pass"] = ~(identity_excluded | geometric_excluded)
+    out["s04_basis"] = [
+        "+".join(
+            name for name, fired in (("association", by_id), ("geometry", by_geometry)) if fired
+        )
+        for by_id, by_geometry in zip(identity_excluded, geometric_excluded)
+    ]
+    # The reconciliation the identity join has to survive: how often do the two
+    # methods disagree? Geometry here is run against the whole conservation
+    # layer, not just the part the table does not cover, so the comparison is
+    # like for like.
+    if identity_available:
+        all_overlap = _overlap_area_m2(out, conservation)
+        geometry_says = all_overlap > conservation_band_m2
+        out.attrs["s04_reconciliation"] = {
+            "identity_available": True,
+            "agree_excluded": int((identity_excluded & geometry_says).sum()),
+            "identity_only": int((identity_excluded & ~geometry_says).sum()),
+            "geometry_only": int((~identity_excluded & geometry_says).sum()),
+            "agree_clear": int((~identity_excluded & ~geometry_says).sum()),
+            "protected_areas_without_association": int(len(geometric_layer)),
+        }
     else:
-        # The register asks for a *material* intersection; "intersects" is also
-        # true of a shared boundary, which is an overlap of nothing at all. The
-        # spatial index still finds the candidate pairs and only those pairs are
-        # intersected, so the national layer is still never unioned.
-        #
-        # Measured, this releases nobody: on the 10,684 cadastral units all
-        # 1,473 conservation hits have a positive overlap, because two
-        # independently digitised LINZ layers do not share exact edges. What
-        # they do share is slivers - 1,103 of those 1,473 overlap by 1 m2 or
-        # less - and "> 0" does not touch those either. So this closes the gap
-        # between the code and the register without yet answering what
-        # "material" should mean; see the sliver note in the README.
-        neighbours = conservation.geometry.reset_index(drop=True)
-        hits = gpd.sjoin(
-            out[["geometry"]],
-            gpd.GeoDataFrame(geometry=neighbours, crs=conservation.crs),
-            how="inner", predicate="intersects",
-        )
-        matched = gpd.GeoSeries(
-            neighbours.to_numpy()[hits["index_right"].to_numpy()],
-            index=hits.index, crs=conservation.crs,
-        )
-        overlap_m2 = out.geometry.loc[hits.index].intersection(matched, align=False).area
-        out["S04_pass"] = ~out.index.isin(hits.index[overlap_m2.to_numpy() > 0.0])
+        out.attrs["s04_reconciliation"] = {"identity_available": False}
     out["solar_kwh_m2"] = solar
     out["luc_class"] = luc
-    out["S05_hpl_flag"] = out["luc_class"].isin([1, 2, 3])
+    # S-05. The flag is a coverage question, not a point question: how much of
+    # this unit is LUC 1-3, against how much of it the LUC layer cannot place.
+    # The band is this unit's own, ``accuracy x perimeter / area``, so a long
+    # thin unit is held to a weaker claim than a compact one - a 20 ha square
+    # has a band near 29%, and a coverage fraction under its own band is not
+    # distinguishable from zero. ``hpl_fraction`` is an overlay result and
+    # arrives as a column, the same way slope does, so this module needs no LUC
+    # layer. Without it the rule falls back to the single dominant class and
+    # says so, which is what the demo fixtures use.
+    luc_band = (
+        out.geometry.map(
+            lambda geometry: overlap_noise_band_m2(geometry, cfg.luc_overlay_accuracy_m)
+        )
+        / out.geometry.area
+    )
+    out["luc_noise_band"] = luc_band.round(4)
+    if "hpl_fraction" in sites.columns:
+        hpl_fraction = pd.to_numeric(sites["hpl_fraction"], errors="coerce")
+        out["hpl_fraction"] = hpl_fraction.round(4)
+        out["S05_hpl_flag"] = hpl_fraction > luc_band
+        out["s05_basis"] = "coverage_fraction"
+    else:
+        out["hpl_fraction"] = np.nan
+        out["S05_hpl_flag"] = out["luc_class"].isin([1, 2, 3])
+        out["s05_basis"] = "dominant_class"
     out = add_grid_proxies(out, powerlines, roads, cfg)
 
     # S-08 slope. The value is precomputed into a per-site table, so a missing
@@ -289,6 +394,9 @@ def evaluate_sites(
     audit = out[[
         "site_id", "status", "failed_rule_ids", "rules_not_applied",
         "width_2ap_m", "width_core_pass", "width_methods_disagree",
-        "S05_hpl_flag", "S06_verify_grid", "S08_verify_slope", "S10_coastal_flag",
+        "S05_hpl_flag", "s05_basis", "hpl_fraction", "luc_noise_band",
+        "s04_basis", "conservation_overlap_m2", "conservation_noise_band_m2",
+        "S06_verify_grid", "S08_verify_slope", "S10_coastal_flag",
     ]].copy()
+    audit.attrs["s04_reconciliation"] = out.attrs["s04_reconciliation"]
     return out, audit

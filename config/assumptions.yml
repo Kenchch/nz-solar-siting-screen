@@ -50,6 +50,43 @@ siting:
   # essentially every site at n = 2,356. The OSM study deliberately does not use
   # it; scripts/osm_grid_study.py says so where it builds the flag.
   rank_shift_review: 3
+  # Positional accuracy of each pair of layers a rule intersects, in metres.
+  # An overlap smaller than accuracy x boundary length is indistinguishable
+  # from the two publishers disagreeing about where the boundary is, so it is
+  # not a material intersection. Every value below is derived from what the
+  # publisher says about the layer, quoted here, and none of it is tuned
+  # against the screened population - which is the whole point, because the
+  # population is what the threshold has to be trusted to judge.
+  source_accuracy:
+    # S-04. Small, because these two layers are not independent: Protected
+    # Areas is largely a re-publication of the same cadastral geometry, so the
+    # residual is version noise rather than mapping error. This value is only
+    # ever used for the protected areas the association table does not cover.
+    conservation_overlay_m: 0.5
+    conservation_overlay_basis: >-
+      LINZ Protected Areas (layer 53564): "The boundaries for most protected
+      areas are derived from the Landonline Primary Parcel(s). In some cases,
+      the boundaries may have been based on unsurveyed parcels defined to
+      varying degrees of accuracy. As such please note that the boundaries are
+      indicative only." Because most boundaries share a lineage with the parcel
+      layer, a sub-metre band covers the numerical residual between two
+      renderings of one boundary. The parcels this does not describe are
+      handled by identity against LINZ table 3561, not by this number.
+    # S-05. Two orders of magnitude larger, because these two layers really are
+    # independent and one of them is 1970s mapping.
+    luc_overlay_m: 32.0
+    luc_overlay_basis: >-
+      NZLRI Land Use Capability 2021 (LRIS layer 48076): "Update of Edition 3
+      NZLRI. This update involves no new mapping", over "national coverage from
+      mapping between 1973 and 1979 at a scale of 1:63,360"; the 1:50,000
+      second-edition upgrades listed are Northland, Wellington, Marlborough and
+      Gisborne-East Cape, none of which is Canterbury. 32 m is 0.5 mm at
+      1:63,360, the ordinary cartographic convention for plotting accuracy. It
+      is a derivation from the stated scale, NOT a figure LRIS publishes.
+    # Context for both: the parcel layer is itself the coarser partner in rural
+    # New Zealand. LINZ NZ Primary Land Parcels (layer 50823): "This layer has
+    # a nominal accuracy of 0.1-1m in urban areas and 1-100m in rural areas."
+    # The study area is rural, so neither band above is conservative.
   # Review-ordering weights. Grid distance is intentionally excluded from the
   # score and published as distances plus a verify flag instead.
   screen_score_weights:
@@ -162,6 +199,11 @@ real_data:
       # Protected Areas layer.
       layer_id: 53564
       dataset_version: LINZ Protected Areas
+  # The table that turns S-04 from a geometry question into an identity one.
+  # LINZ publishes which primary parcels each protected area is made of, so the
+  # screen reads the association instead of inferring it from two renderings of
+  # the same boundary. It has no geometry, so it is fetched by napalis_id.
+  protected_area_parcel_table: 3561
   # Publishers spell these differently between releases; the first match wins and
   # a miss reports the columns that were actually present.
   landcover_class_fields: [Name_2018, Name_2012, Class_2018, lcdb_class, Name]

@@ -174,6 +174,9 @@ def test_water_that_really_touches_still_excludes():
 
 
 def test_the_register_and_the_code_agree_on_what_s04_measures():
+    """S-04 answers by identity first, and geometry only where it must."""
     register = (ROOT / "rules" / "rule_register.csv").read_text(encoding="utf-8")
     s04 = next(line for line in register.splitlines() if line.startswith("S-04,"))
-    assert "material intersection" in s04
+    assert "3561" in s04, "the association table is the primary test"
+    assert "s04_basis" in s04, "every unit records which path decided it"
+    assert "conservation_overlay_m" in s04, "the fallback names its accuracy band"
