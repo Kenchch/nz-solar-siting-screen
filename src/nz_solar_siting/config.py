@@ -68,6 +68,7 @@ def load_project_config(path: str | Path) -> ProjectConfig:
         excluded_voltage_v=float(values["excluded_voltage_v"]),
         voltage_column=str(values["voltage_column"]),
         maximum_mean_slope_deg=float(values["maximum_mean_slope_deg"]),
+        minimum_slope_sample_coverage=float(values["minimum_slope_sample_coverage"]),
         coastal_review_distance_m=float(values["coastal_review_distance_m"]),
         conservation_overlay_accuracy_m=float(accuracy["conservation_overlay_m"]),
         luc_overlay_accuracy_m=float(accuracy["luc_overlay_m"]),
